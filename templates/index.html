@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+
+    <meta charset="UTF-8">
+
+    <title>DataSentinel</title>
+
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+
+    <style>
+
+        body{
+            background:#0f172a;
+            color:white;
+            font-family:Arial;
+            padding:20px;
+        }
+
+        h1{
+            color:#00ff88;
+        }
+
+        .card{
+            background:#1e293b;
+            padding:15px;
+            margin-top:10px;
+            border-radius:10px;
+        }
+
+    </style>
+
+</head>
+
+<body>
+
+    <h1>🛡 DataSentinel Dashboard</h1>
+
+    <div id="alerts"></div>
+
+    <script>
+
+        const socket = io();
+
+        socket.on("receive_alert", (data) => {
+
+            const div = document.createElement("div");
+
+            div.className = "card";
+
+            div.innerHTML = `
+                <strong>ALERTA:</strong><br>
+                ${data.message}
+            `;
+
+            document
+                .getElementById("alerts")
+                .prepend(div);
+        });
+
+    </script>
+
+</body>
+</html>

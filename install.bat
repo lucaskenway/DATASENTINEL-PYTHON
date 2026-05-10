@@ -1,0 +1,14 @@
+@echo off
+
+echo Criando ambiente virtual...
+python -m venv .venv
+
+echo Ativando ambiente virtual...
+call .venv\Scripts\activate
+
+echo Instalando dependencias...
+pip install -r requirements.txt
+
+echo.
+echo Instalacao concluida!
+pause
