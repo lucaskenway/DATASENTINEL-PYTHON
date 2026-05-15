@@ -1,368 +1,63 @@
+<!-- ========================================= -->
+<!-- index.html -->
+<!-- ========================================= -->
+
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
+
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DataSentinel Cyber Defense</title>
 
-<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700&display=swap" rel="stylesheet">
+<title>DataSentinel SOC</title>
 
-<style>
+<link rel="stylesheet" href="style.css">
 
-*{
-    margin:0;
-    padding:0;
-    box-sizing:border-box;
-}
+<link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@300;400;600;700&display=swap" rel="stylesheet">
 
-body{
-    background:#020611;
-    color:#00ffcc;
-    font-family:'Orbitron',sans-serif;
-    overflow-x:hidden;
-}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-body::before{
-    content:"";
-    position:fixed;
-    width:100%;
-    height:100%;
-    background:
-    linear-gradient(rgba(0,255,204,0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0,255,204,0.03) 1px, transparent 1px);
-    background-size:40px 40px;
-    z-index:-1;
-}
-
-.container{
-    display:flex;
-    min-height:100vh;
-}
-
-.sidebar{
-    width:270px;
-    background:#07101d;
-    border-right:1px solid #00ffcc33;
-    padding:25px;
-    box-shadow:0 0 20px #00ffcc22;
-}
-
-.logo{
-    font-size:38px;
-    font-weight:bold;
-    color:#00ffcc;
-    text-shadow:0 0 12px #00ffcc;
-    margin-bottom:8px;
-}
-
-.subtitle{
-    color:#8fa6b3;
-    font-size:13px;
-    margin-bottom:45px;
-}
-
-.menu{
-    list-style:none;
-}
-
-.menu li{
-    padding:18px;
-    margin-bottom:15px;
-    border-radius:16px;
-    transition:0.3s;
-    border:1px solid transparent;
-    cursor:pointer;
-}
-
-.menu li:hover{
-    background:#00ffcc11;
-    border:1px solid #00ffcc55;
-    box-shadow:0 0 15px #00ffcc55;
-}
-
-.menu strong{
-    display:block;
-    margin-bottom:5px;
-}
-
-.menu span{
-    color:#718096;
-    font-size:12px;
-}
-
-.main{
-    flex:1;
-    padding:20px;
-}
-
-.top-header{
-    display:grid;
-    grid-template-columns:1fr 1fr 1fr 260px;
-    gap:15px;
-    margin-bottom:20px;
-}
-
-.top-card,
-.card,
-.box{
-    background:#07101d;
-    border-radius:18px;
-    border:1px solid #00ffcc33;
-    box-shadow:0 0 18px #00ffcc22;
-}
-
-.top-card{
-    padding:20px;
-}
-
-.top-card h4{
-    color:#718096;
-    font-size:12px;
-    margin-bottom:12px;
-}
-
-.top-card p{
-    color:#00ffcc;
-    font-size:24px;
-    text-shadow:0 0 10px #00ffcc;
-}
-
-.hacker{
-    border-radius:18px;
-    border:1px solid #00ffcc33;
-    background:url('https://images.unsplash.com/photo-1510511459019-5dda7724fd87?q=80&w=1200') center/cover;
-}
-
-.cards{
-    display:grid;
-    grid-template-columns:repeat(4,1fr);
-    gap:18px;
-    margin-bottom:20px;
-}
-
-.card{
-    padding:25px;
-    position:relative;
-    overflow:hidden;
-}
-
-.card::before{
-    content:"";
-    position:absolute;
-    top:0;
-    left:0;
-    width:100%;
-    height:2px;
-    background:#00ffcc;
-    box-shadow:0 0 12px #00ffcc;
-}
-
-.card h3{
-    font-size:13px;
-    color:#ff4d6d;
-    margin-bottom:15px;
-}
-
-.value{
-    font-size:48px;
-    color:white;
-    font-weight:bold;
-}
-
-.card small{
-    color:#00ff88;
-}
-
-.dashboard{
-    display:grid;
-    grid-template-columns:2fr 1fr;
-    gap:20px;
-    margin-bottom:20px;
-}
-
-.box{
-    padding:20px;
-}
-
-.box h2{
-    margin-bottom:20px;
-}
-
-.map{
-    width:100%;
-    height:350px;
-    border-radius:16px;
-    background:url('https://upload.wikimedia.org/wikipedia/commons/8/80/World_map_-_low_resolution.svg') center/cover;
-    background-color:#091827;
-    border:1px solid #00ffcc22;
-    margin-bottom:20px;
-    filter:brightness(0.35) sepia(1) hue-rotate(290deg) saturate(4);
-}
-
-.logs p{
-    margin-bottom:12px;
-    font-size:14px;
-}
-
-.red{
-    color:#ff004c;
-}
-
-.orange{
-    color:#ffaa00;
-}
-
-.green{
-    color:#00ff88;
-}
-
-.ip{
-    margin-bottom:20px;
-}
-
-.progress{
-    width:100%;
-    height:10px;
-    background:#111827;
-    border-radius:10px;
-    overflow:hidden;
-}
-
-.progress div{
-    height:100%;
-    background:#ff004c;
-    box-shadow:0 0 10px #ff004c;
-}
-
-.chart{
-    width:220px;
-    height:220px;
-    margin:25px auto;
-    border-radius:50%;
-    background:conic-gradient(
-        #ff004c 0% 35%,
-        #ffaa00 35% 60%,
-        #00ff88 60% 80%,
-        #00ccff 80% 100%
-    );
-    position:relative;
-}
-
-.chart::before{
-    content:"";
-    position:absolute;
-    width:110px;
-    height:110px;
-    background:#07101d;
-    border-radius:50%;
-    top:50%;
-    left:50%;
-    transform:translate(-50%,-50%);
-}
-
-.network{
-    display:grid;
-    grid-template-columns:2fr 1fr;
-    gap:20px;
-}
-
-.graph{
-    height:220px;
-    border-radius:16px;
-    background:linear-gradient(to top,#081120,#10223a);
-    border:1px solid #00ffcc22;
-    position:relative;
-    overflow:hidden;
-}
-
-.graph::before{
-    content:"";
-    position:absolute;
-    width:100%;
-    height:3px;
-    background:#00ff88;
-    top:50%;
-    animation:pulse 3s linear infinite;
-}
-
-@keyframes pulse{
-    0%{ top:90%; }
-    100%{ top:10%; }
-}
-
-.terminal{
-    margin-top:20px;
-    background:black;
-    border-radius:16px;
-    padding:20px;
-    border:1px solid #00ffcc44;
-    color:#00ff88;
-    font-family:monospace;
-    box-shadow:0 0 18px #00ffcc22;
-}
-
-.blink{
-    animation:blink 1s infinite;
-}
-
-@keyframes blink{
-    50%{
-        opacity:0;
-    }
-}
-
-@media(max-width:1200px){
-
-    .top-header,
-    .cards,
-    .dashboard,
-    .network{
-        grid-template-columns:1fr;
-    }
-}
-
-@media(max-width:700px){
-
-    .container{
-        flex-direction:column;
-    }
-
-    .sidebar{
-        width:100%;
-    }
-}
-
-</style>
 </head>
+
 <body>
+
+<div class="scanlines"></div>
 
 <div class="container">
 
+<!-- SIDEBAR -->
+
 <aside class="sidebar">
 
-<div class="logo">DataSentinel</div>
-<div class="subtitle">CYBER DEFENSE SYSTEM</div>
+<div class="logo">
+DATASENTINEL
+</div>
+
+<div class="subtitle">
+SISTEMA INTELIGENTE DE SEGURANÇA
+</div>
 
 <ul class="menu">
 
-<li>
+<li class="active">
 <strong>📊 DASHBOARD</strong>
 <span>VISÃO GERAL</span>
 </li>
 
 <li>
-<strong>🚨 ATAQUES</strong>
+<strong>🚨 ALERTAS</strong>
 <span>TEMPO REAL</span>
 </li>
 
 <li>
-<strong>🔥 FIREWALL</strong>
-<span>REGRAS E BLOQUEIOS</span>
+<strong>🛡 FIREWALL</strong>
+<span>BLOQUEIOS</span>
 </li>
 
 <li>
 <strong>📄 LOGS</strong>
-<span>EVENTOS DO SISTEMA</span>
+<span>EVENTOS</span>
 </li>
 
 <li>
@@ -371,144 +66,311 @@ body::before{
 </li>
 
 <li>
-<strong>⚙ CONFIGURAÇÕES</strong>
+<strong>⚙ CONFIG</strong>
 <span>SISTEMA</span>
 </li>
 
 </ul>
 
+<div class="system-box">
+
+<h3>● SISTEMA ONLINE</h3>
+
+<div class="status-item">
+<small>CPU</small>
+
+<div class="progress">
+<div style="width:23%"></div>
+</div>
+
+</div>
+
+<div class="status-item">
+<small>MEMÓRIA</small>
+
+<div class="progress">
+<div style="width:45%"></div>
+</div>
+
+</div>
+
+<div class="status-item">
+<small>REDE</small>
+
+<div class="progress">
+<div style="width:82%"></div>
+</div>
+
+</div>
+
+</div>
+
 </aside>
+
+<!-- MAIN -->
 
 <main class="main">
 
-<section class="top-header">
+<!-- HEADER -->
 
-<div class="top-card">
-<h4>SYSTEM STATUS</h4>
-<p>PROTECTED</p>
+<div class="header">
+
+<div>
+
+<h1>DASHBOARD</h1>
+
+<p>
+MONITORAMENTO DE REDE EM TEMPO REAL
+</p>
+
 </div>
 
-<div class="top-card">
-<h4>ACTIVE MODE</h4>
-<p>REAL-TIME</p>
+<div class="header-right">
+
+<div class="top-terminal">
+root@datasentinel:~#
 </div>
 
-<div class="top-card">
-<h4>TIME</h4>
 <p id="clock"></p>
+
+<p class="online">
+SISTEMA ATIVO ●
+</p>
+
 </div>
 
-<div class="hacker"></div>
+</div>
 
-</section>
+<!-- CARDS -->
 
 <section class="cards">
 
 <div class="card">
-<h3>ATAQUES BLOQUEADOS</h3>
-<div class="value">128</div>
-<small>+23 hoje</small>
+
+<h3>CONEXÕES ATIVAS</h3>
+
+<div class="value">23</div>
+
+<div class="mini-graph"></div>
+
 </div>
 
 <div class="card">
-<h3>TENTATIVAS DETECTADAS</h3>
-<div class="value">312</div>
-<small>+45 hoje</small>
+
+<h3>AMEAÇAS DETECTADAS</h3>
+
+<div class="value">7</div>
+
+<div class="mini-graph"></div>
+
 </div>
 
 <div class="card">
-<h3>IP'S BLOQUEADOS</h3>
-<div class="value">27</div>
-<small>+8 hoje</small>
+
+<h3>IPS BLOQUEADOS</h3>
+
+<div class="value">4</div>
+
+<div class="mini-graph"></div>
+
 </div>
 
 <div class="card">
-<h3>STATUS SISTEMA</h3>
-<div class="value">100%</div>
-<small>PROTEGIDO</small>
+
+<h3>PAÍSES ATINGIDOS</h3>
+
+<div class="value">3</div>
+
+<div class="mini-graph"></div>
+
 </div>
 
 </section>
+
+<!-- MAPA -->
 
 <section class="dashboard">
 
-<div class="box">
+<div class="box map-panel">
 
-<h2>🌍 ATAQUES EM TEMPO REAL</h2>
+<div class="box-header">
+<h2>🌍 MAPA DE AMEAÇAS EM TEMPO REAL</h2>
+<span class="tag">ATUALIZADO</span>
+</div>
 
-<div class="map"></div>
+<div class="map">
 
-<div class="logs">
+<!-- GRID -->
+<div class="map-grid"></div>
 
-<p class="red">[BRUTE FORCE] Tentativa login falhou</p>
-<p class="orange">[SQL INJECTION] SQLi detectado</p>
-<p class="green">[OK] Firewall ativo</p>
-<p class="red">[PORT SCAN] Varredura detectada</p>
-<p class="orange">[XSS ATTEMPT] Script bloqueado</p>
+<!-- RADAR -->
+<div class="radar"></div>
 
+<!-- PARTÍCULAS -->
+<div class="particle p1"></div>
+<div class="particle p2"></div>
+<div class="particle p3"></div>
+<div class="particle p4"></div>
+
+<!-- SVG -->
+<!-- linhas de ataque removidas -->
+</div>
+
+<div class="map-footer">
+
+<div class="small-card">
+<h3>ATIVIDADES RECENTES</h3>
+<div class="small-graph"></div>
+</div>
+
+<div class="small-card countries-card">
+<h3>TOP PAÍSES ATINGIDOS</h3>
+<div class="country-list">
+<span>BRASIL <strong>58%</strong></span>
+<span>ESTADOS UNIDOS <strong>33%</strong></span>
+<span>ALEMANHA <strong>17%</strong></span>
+</div>
 </div>
 
 </div>
 
-<div>
-
-<div class="box" style="margin-bottom:20px;">
-
-<h2>TOP IP'S MALICIOSOS</h2>
-
-<div class="ip">
-<p>45.33.32.156</p>
-<div class="progress"><div style="width:90%"></div></div>
 </div>
 
-<div class="ip">
-<p>192.168.1.105</p>
-<div class="progress"><div style="width:70%"></div></div>
+<div class="box alert-panel">
+
+<div class="box-header">
+<h2>🚨 ALERTAS EM TEMPO REAL</h2>
+<span class="status-badge live">LIVE</span>
 </div>
 
-<div class="ip">
-<p>201.33.23.77</p>
-<div class="progress"><div style="width:50%"></div></div>
+<div class="alert red-alert">
+<h4>PORT_SCAN DETECTADO</h4>
+<p>IP: 127.0.0.1</p>
+<p>LOCALIZAÇÃO: Localhost</p>
 </div>
+
+<div class="alert yellow-alert">
+<h4>CONEXÃO SUSPEITA DETECTADA</h4>
+<p>IP: 192.168.1.100</p>
+<p>LOCALIZAÇÃO: Brasil - São Paulo</p>
+</div>
+
+<div class="alert red-alert">
+<h4>TENTATIVA DE ACESSO SUSPEITO</h4>
+<p>IP: 203.0.113.5</p>
+<p>LOCALIZAÇÃO: Estados Unidos - New York</p>
+</div>
+
+<div class="alert yellow-alert">
+<h4>MÚLTIPLAS CONEXÕES DETECTADAS</h4>
+<p>IP: 45.67.89.10</p>
+<p>LOCALIZAÇÃO: Alemanha - Frankfurt</p>
+</div>
+
+<div class="alert red-alert">
+<h4>PORT_SCAN DETECTADO</h4>
+<p>IP: 127.0.0.1</p>
+<p>LOCALIZAÇÃO: Localhost</p>
+</div>
+
+<button class="button-link">VER TODOS OS ALERTAS</button>
 
 </div>
 
-<div class="box">
-<h2>DISTRIBUIÇÃO DE ATAQUES</h2>
-<div class="chart"></div>
+<div class="box top-ips-panel">
+
+<div class="box-header">
+<h2>🛡 TOP IPS MAIS ATIVOS</h2>
+<span class="tag">CONEXÕES</span>
+</div>
+
+<div class="ips-list">
+<div><strong>192.168.1.100</strong><small>45 conexões</small></div>
+<div><strong>203.0.113.5</strong><small>32 conexões</small></div>
+<div><strong>45.67.89.10</strong><small>28 conexões</small></div>
+<div><strong>127.0.0.1</strong><small>23 conexões</small></div>
+<div><strong>8.8.8.8</strong><small>19 conexões</small></div>
 </div>
 
 </div>
 
 </section>
+
+<!-- NETWORK -->
 
 <section class="network">
 
 <div class="box">
-<h2>USO DE REDE</h2>
-<div class="graph"></div>
+
+<h2>📡 USO DE REDE</h2>
+
+<div class="graph">
+
+<canvas id="networkChart"></canvas>
+
 </div>
 
-<div class="box">
+</div>
 
-<h2>LOGS RECENTES</h2>
+<div class="box logs-panel">
+
+<h2>📄 LOGS RECENTES</h2>
 
 <div class="logs">
+<p>[20:32:41] ALERTA PORT_SCAN detectado</p>
+<p>[20:31:55] Tentativa de acesso suspeito</p>
+<p>[20:31:20] Firewall bloqueou IP</p>
+<p>[20:30:45] Múltiplas conexões detectadas</p>
+</div>
 
-<p class="red">[BLOCK] Firewall bloqueou IP suspeito</p>
-<p class="orange">[WARNING] SSH inválido detectado</p>
-<p class="red">[ALERT] Ataque Brute Force</p>
-<p class="orange">[WARNING] Porta suspeita detectada</p>
-
+<div class="info-grid">
+<div class="info-card"><span>AMEAÇAS BLOQUEADAS</span><strong>128</strong></div>
+<div class="info-card"><span>CONEXÕES MONITORADAS</span><strong>1.472</strong></div>
+<div class="info-card"><span>DADOS ANALISADOS</span><strong>2.45 TB</strong></div>
+<div class="info-card"><span>TAXA DE DETECÇÃO</span><strong>98.7%</strong></div>
 </div>
 
 </div>
 
 </section>
 
+<section class="summary-grid">
+
+<div class="box commands-panel">
+<h2>🖥️ ÚLTIMOS COMANDOS</h2>
+<div class="terminal-commands">
+<p>netstat -an</p>
+<p>tcpdump -i any</p>
+<p>nmap -sS 127.0.0.1</p>
+<p>firewall list rules</p>
+<p>system status</p>
+</div>
+</div>
+
+<div class="box system-summary-panel">
+<h2>📊 RESUMO DO SISTEMA</h2>
+<div class="summary-list">
+<div><span>AMEAÇAS BLOQUEADAS</span><strong>128</strong></div>
+<div><span>CONEXÕES MONITORADAS</span><strong>1.472</strong></div>
+<div><span>DADOS ANALISADOS</span><strong>2.45 TB</strong></div>
+<div><span>TAXA DE DETECÇÃO</span><strong>98.7%</strong></div>
+</div>
+</div>
+
+</section>
+
+<!-- TERMINAL -->
+
 <div class="terminal">
 
-datasentinel@localhost:~$ monitorando ataques em tempo real...
+<p>root@datasentinel:~# netstat -an</p>
+
+<p>root@datasentinel:~# tcpdump -i any</p>
+
+<p>root@datasentinel:~# firewall status</p>
+
+<p>Monitorando ameaças em tempo real...</p>
+
 <span class="blink">█</span>
 
 </div>
@@ -517,22 +379,7 @@ datasentinel@localhost:~$ monitorando ataques em tempo real...
 
 </div>
 
-<script>
-
-function atualizarRelogio(){
-
-const agora = new Date();
-
-document.getElementById('clock').innerHTML =
-agora.toLocaleTimeString();
-
-}
-
-setInterval(atualizarRelogio,1000);
-
-atualizarRelogio();
-
-</script>
+<script src="script.js"></script>
 
 </body>
 </html>
