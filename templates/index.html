@@ -1,385 +1,256 @@
-<!-- ========================================= -->
-<!-- index.html -->
-<!-- ========================================= -->
-
 <!DOCTYPE html>
 <html lang="pt-BR">
-
 <head>
-
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 <title>DataSentinel SOC</title>
-
 <link rel="stylesheet" href="style.css">
-
-<link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@300;400;600;700&display=swap" rel="stylesheet">
-
+<link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@300;400;600;700&family=Fira+Code:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
 </head>
-
 <body>
-
-<div class="scanlines"></div>
+<div class="tech-bg" aria-hidden="true">
+<div class="tech-grid"></div>
+<div class="tech-binary"></div>
+<div class="tech-vignette-inner"></div>
+</div>
+<div class="scanlines" aria-hidden="true"></div>
+<div class="vignette" aria-hidden="true"></div>
 
 <div class="container">
-
-<!-- SIDEBAR -->
-
 <aside class="sidebar">
-
-<div class="logo">
-DATASENTINEL
+<div class="sidebar-brand">
+<div class="brand-shield" aria-hidden="true">
+<svg viewBox="0 0 48 48" width="44" height="44" fill="none" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<linearGradient id="sg" x1="8" y1="4" x2="40" y2="44" gradientUnits="userSpaceOnUse">
+<stop stop-color="#4dff9a"/><stop offset="1" stop-color="#0a3d24"/>
+</linearGradient>
+<filter id="glow"><feGaussianBlur stdDeviation="1.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+</defs>
+<path d="M24 4 L42 10 V22 C42 34 32 42 24 44 C16 42 6 34 6 22 V10 Z" stroke="url(#sg)" stroke-width="1.4" fill="rgba(4,18,14,0.85)" filter="url(#glow)"/>
+<path d="M24 12 L34 16 V24 C34 31 27 36 24 37 C21 36 14 31 14 24 V16 Z" stroke="rgba(157,255,198,0.35)" stroke-width="0.8" fill="none"/>
+</svg>
 </div>
-
-<div class="subtitle">
-SISTEMA INTELIGENTE DE SEGURANÇA
+<div class="brand-text">
+<div class="logo">DATASENTINEL</div>
+<div class="subtitle">Security Operations Center</div>
 </div>
+</div>
+<div class="sidebar-divider hud-line"><span class="mono">NODE · SOC-01</span></div>
 
-<ul class="menu">
-
-<li class="active">
-<strong>📊 DASHBOARD</strong>
-<span>VISÃO GERAL</span>
+<ul class="menu" role="navigation">
+<li class="active" data-section="dash">
+<span class="nav-ico" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 10.5L12 4l8 6.5V20a1 1 0 01-1 1h-5v-6H10v6H5a1 1 0 01-1-1v-9.5z"/></svg></span>
+<div class="nav-copy"><strong>Dashboard</strong><span>Visão geral</span></div>
 </li>
-
-<li>
-<strong>🚨 ALERTAS</strong>
-<span>TEMPO REAL</span>
+<li data-section="alerts">
+<span class="nav-ico" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 22a2 2 0 002-2H10a2 2 0 002 2zm6-6V11a6 6 0 10-12 0v5L4 18h16l-2-2z"/></svg></span>
+<div class="nav-copy"><strong>Alertas</strong><span>Tempo real</span></div>
 </li>
-
-<li>
-<strong>🛡 FIREWALL</strong>
-<span>BLOQUEIOS</span>
+<li data-section="firewall">
+<span class="nav-ico" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span>
+<div class="nav-copy"><strong>Firewall</strong><span>Bloqueios</span></div>
 </li>
-
-<li>
-<strong>📄 LOGS</strong>
-<span>EVENTOS</span>
+<li data-section="logs">
+<span class="nav-ico" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 6h16M4 12h10M4 18h14"/></svg></span>
+<div class="nav-copy"><strong>Logs</strong><span>Eventos</span></div>
 </li>
-
-<li>
-<strong>🌐 REDE</strong>
-<span>MONITORAMENTO</span>
+<li data-section="net">
+<span class="nav-ico" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><path d="M2 12h3m14 0h3M12 2v3m0 14v3M4.93 4.93l2.12 2.12m9.9 9.9l2.12 2.12M4.93 19.07l2.12-2.12m9.9-9.9l2.12-2.12"/></svg></span>
+<div class="nav-copy"><strong>Rede</strong><span>Monitoramento</span></div>
 </li>
-
-<li>
-<strong>⚙ CONFIG</strong>
-<span>SISTEMA</span>
+<li data-section="config">
+<span class="nav-ico" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41m11.32-11.32l1.41-1.41"/></svg></span>
+<div class="nav-copy"><strong>Config</strong><span>Sistema</span></div>
 </li>
-
 </ul>
 
 <div class="system-box">
-
-<h3>● SISTEMA ONLINE</h3>
-
+<h3>Saúde do host</h3>
 <div class="status-item">
 <small>CPU</small>
-
-<div class="progress">
-<div style="width:23%"></div>
+<div class="progress"><div id="bar-cpu" style="width:0%"></div></div>
+<span class="stat-readout mono" id="readout-cpu">—</span>
 </div>
-
-</div>
-
 <div class="status-item">
-<small>MEMÓRIA</small>
-
-<div class="progress">
-<div style="width:45%"></div>
+<small>Memória</small>
+<div class="progress"><div id="bar-mem" style="width:0%"></div></div>
+<span class="stat-readout mono" id="readout-mem">—</span>
 </div>
-
-</div>
-
 <div class="status-item">
-<small>REDE</small>
-
-<div class="progress">
-<div style="width:82%"></div>
+<small>Atividade de rede</small>
+<div class="progress"><div id="bar-net" style="width:0%"></div></div>
+<span class="stat-readout mono" id="readout-net">—</span>
 </div>
-
+<p class="hud-micro mono" id="metric-latency">polling…</p>
 </div>
-
-</div>
-
 </aside>
 
-<!-- MAIN -->
-
 <main class="main">
-
-<!-- HEADER -->
-
-<div class="header">
-
+<header class="header">
 <div>
-
-<h1>DASHBOARD</h1>
-
-<p>
-MONITORAMENTO DE REDE EM TEMPO REAL
-</p>
-
+<h1>Security dashboard</h1>
+<p id="subtitle-main">Fluxo correlacionado ao backend · Socket.IO ativo</p>
 </div>
-
 <div class="header-right">
-
-<div class="top-terminal">
-root@datasentinel:~#
+<div class="top-terminal mono" id="session-line">root@datasentinel:~ # session</div>
+<p class="mono" id="clock">—</p>
+<p class="online" id="socket-status">socket: conectando…</p>
 </div>
+</header>
 
-<p id="clock"></p>
-
-<p class="online">
-SISTEMA ATIVO ●
-</p>
-
-</div>
-
-</div>
-
-<!-- CARDS -->
-
-<section class="cards">
-
+<section class="cards" aria-label="Indicadores">
 <div class="card">
-
-<h3>CONEXÕES ATIVAS</h3>
-
-<div class="value">23</div>
-
-<div class="mini-graph"></div>
-
+<div class="card-hud"><span class="mono">LIVE</span><span class="card-chip mono" id="pulse-connections">●</span></div>
+<h3>Conexões ativas</h3>
+<div class="value mono" id="metric-connections">—</div>
+<div class="card-trend mono" id="trend-connections"><span class="trend-val">—</span><span class="trend-label">vs amostra inicial</span></div>
+<div class="sparkline" id="spark-connections" aria-hidden="true"></div>
 </div>
-
 <div class="card">
-
-<h3>AMEAÇAS DETECTADAS</h3>
-
-<div class="value">7</div>
-
-<div class="mini-graph"></div>
-
+<div class="card-hud"><span class="mono">HOST</span><span class="card-chip mono" id="pulse-threats">●</span></div>
+<h3>Ameaças (servidor)</h3>
+<div class="value mono" id="metric-threats">—</div>
+<div class="card-trend mono" id="trend-threats"><span class="trend-val">—</span><span class="trend-label">vs amostra inicial</span></div>
+<div class="sparkline" id="spark-threats" aria-hidden="true"></div>
 </div>
-
 <div class="card">
-
-<h3>IPS BLOQUEADOS</h3>
-
-<div class="value">4</div>
-
-<div class="mini-graph"></div>
-
+<div class="card-hud"><span class="mono">SESSÃO</span><span class="card-chip mono" id="pulse-sources">●</span></div>
+<h3>Fontes únicas (sessão)</h3>
+<div class="value mono" id="metric-unique-ips">0</div>
+<div class="card-trend mono" id="trend-unique"><span class="trend-val">—</span><span class="trend-label">vs amostra inicial</span></div>
+<div class="sparkline" id="spark-sources" aria-hidden="true"></div>
 </div>
-
 <div class="card">
-
-<h3>PAÍSES ATINGIDOS</h3>
-
-<div class="value">3</div>
-
-<div class="mini-graph"></div>
-
+<div class="card-hud"><span class="mono">GEO</span><span class="card-chip mono" id="pulse-countries">●</span></div>
+<h3>Países distintos</h3>
+<div class="value mono" id="metric-countries">0</div>
+<div class="card-trend mono" id="trend-countries"><span class="trend-val">—</span><span class="trend-label">vs amostra inicial</span></div>
+<div class="sparkline" id="spark-countries" aria-hidden="true"></div>
 </div>
-
 </section>
 
-<!-- MAPA -->
-
 <section class="dashboard">
-
 <div class="box map-panel">
-
 <div class="box-header">
-<h2>🌍 MAPA DE AMEAÇAS EM TEMPO REAL</h2>
-<span class="tag">ATUALIZADO</span>
+<h2>Mapa tático · correlação geográfica</h2>
+<div class="header-chips">
+<span class="tag mono" id="map-mode">WGS84 → painel</span>
+<span class="status-badge live">live</span>
+</div>
 </div>
 
-<div class="map">
-
-<!-- GRID -->
-<div class="map-grid"></div>
-
-<!-- RADAR -->
-<div class="radar"></div>
-
-<!-- PARTÍCULAS -->
-<div class="particle p1"></div>
-<div class="particle p2"></div>
-<div class="particle p3"></div>
-<div class="particle p4"></div>
-
-<!-- SVG -->
-<!-- linhas de ataque removidas -->
+<div class="map" id="threat-map" role="img" aria-label="Mapa de eventos">
+<!-- Mapa equiretangular WGS84 — mesmo modelo percentual do overlay SVG -->
+<div class="map-world-layer" aria-hidden="true">
+<img class="map-world-img" src="imagens/mapa.png" alt="Mapa do mundo" decoding="async" loading="lazy" width="2000" height="1000"/>
+</div>
+<div class="map-cinematic" aria-hidden="true"></div>
+<div class="map-depth"></div>
+<div class="map-grid map-grid-fine" aria-hidden="true"></div>
+<div class="map-grid" aria-hidden="true"></div>
+<div class="map-glow" aria-hidden="true"></div>
+<div class="radar" aria-hidden="true"></div>
+<svg class="attack-overlay" id="attackOverlay" viewBox="0 0 100 100" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"></svg>
+<div class="map-frame-corner tl"></div>
+<div class="map-frame-corner tr"></div>
+<div class="map-frame-corner bl"></div>
+<div class="map-frame-corner br"></div>
+<div class="map-hud-corner tl mono">WGS84 · SRC</div>
+<div class="map-hud-corner br mono">CORREL · DST</div>
 </div>
 
 <div class="map-footer">
-
 <div class="small-card">
-<h3>ATIVIDADES RECENTES</h3>
-<div class="small-graph"></div>
+<h3>Conexões (amostra)</h3>
+<div class="small-graph">
+<canvas id="miniTrend"></canvas>
 </div>
-
+</div>
+<div class="small-card donut-card">
+<h3>Distribuição geográfica · SIEM</h3>
+<p class="donut-caption mono">Top países (sessão) · centro: ameaças / conexões ao vivo</p>
+<div class="donut-wrap">
+<div class="donut-center-stats mono">
+<div><strong id="donut-threats-center">—</strong><span>Ameaças</span></div>
+<div><strong id="donut-conn-center">—</strong><span>Conexões</span></div>
+</div>
+<canvas id="socDonut" aria-label="Gráfico de países correlacionados"></canvas>
+</div>
+</div>
 <div class="small-card countries-card">
-<h3>TOP PAÍSES ATINGIDOS</h3>
-<div class="country-list">
-<span>BRASIL <strong>58%</strong></span>
-<span>ESTADOS UNIDOS <strong>33%</strong></span>
-<span>ALEMANHA <strong>17%</strong></span>
+<h3>Top origens (sessão)</h3>
+<div class="country-list" id="country-list"></div>
 </div>
 </div>
-
-</div>
-
 </div>
 
 <div class="box alert-panel">
-
 <div class="box-header">
-<h2>🚨 ALERTAS EM TEMPO REAL</h2>
-<span class="status-badge live">LIVE</span>
+<h2>Alertas em tempo real</h2>
+<span class="status-badge live">socket</span>
 </div>
-
-<div class="alert red-alert">
-<h4>PORT_SCAN DETECTADO</h4>
-<p>IP: 127.0.0.1</p>
-<p>LOCALIZAÇÃO: Localhost</p>
-</div>
-
-<div class="alert yellow-alert">
-<h4>CONEXÃO SUSPEITA DETECTADA</h4>
-<p>IP: 192.168.1.100</p>
-<p>LOCALIZAÇÃO: Brasil - São Paulo</p>
-</div>
-
-<div class="alert red-alert">
-<h4>TENTATIVA DE ACESSO SUSPEITO</h4>
-<p>IP: 203.0.113.5</p>
-<p>LOCALIZAÇÃO: Estados Unidos - New York</p>
-</div>
-
-<div class="alert yellow-alert">
-<h4>MÚLTIPLAS CONEXÕES DETECTADAS</h4>
-<p>IP: 45.67.89.10</p>
-<p>LOCALIZAÇÃO: Alemanha - Frankfurt</p>
-</div>
-
-<div class="alert red-alert">
-<h4>PORT_SCAN DETECTADO</h4>
-<p>IP: 127.0.0.1</p>
-<p>LOCALIZAÇÃO: Localhost</p>
-</div>
-
-<button class="button-link">VER TODOS OS ALERTAS</button>
-
+<div class="alert-feed" id="alerts-feed"></div>
+<button type="button" class="button-link" id="btn-clear-alerts">Limpar painel (local)</button>
 </div>
 
 <div class="box top-ips-panel">
-
 <div class="box-header">
-<h2>🛡 TOP IPS MAIS ATIVOS</h2>
-<span class="tag">CONEXÕES</span>
+<h2>Top IPs correlacionados</h2>
+<span class="tag mono" id="ips-tag">frequência</span>
 </div>
-
-<div class="ips-list">
-<div><strong>192.168.1.100</strong><small>45 conexões</small></div>
-<div><strong>203.0.113.5</strong><small>32 conexões</small></div>
-<div><strong>45.67.89.10</strong><small>28 conexões</small></div>
-<div><strong>127.0.0.1</strong><small>23 conexões</small></div>
-<div><strong>8.8.8.8</strong><small>19 conexões</small></div>
+<div class="ips-list" id="ips-list"></div>
 </div>
-
-</div>
-
 </section>
 
-<!-- NETWORK -->
-
 <section class="network">
-
 <div class="box">
-
-<h2>📡 USO DE REDE</h2>
-
-<div class="graph">
-
-<canvas id="networkChart"></canvas>
-
+<div class="box-header">
+<h2>Tráfego monitorado (host)</h2>
+<span class="tag mono">psutil</span>
 </div>
-
+<div class="graph">
+<canvas id="networkChart"></canvas>
+</div>
 </div>
 
 <div class="box logs-panel">
-
-<h2>📄 LOGS RECENTES</h2>
-
-<div class="logs">
-<p>[20:32:41] ALERTA PORT_SCAN detectado</p>
-<p>[20:31:55] Tentativa de acesso suspeito</p>
-<p>[20:31:20] Firewall bloqueou IP</p>
-<p>[20:30:45] Múltiplas conexões detectadas</p>
+<div class="box-header">
+<h2>Logs recentes</h2>
+<span class="tag mono" id="logs-updated">ataques.log</span>
 </div>
-
-<div class="info-grid">
-<div class="info-card"><span>AMEAÇAS BLOQUEADAS</span><strong>128</strong></div>
-<div class="info-card"><span>CONEXÕES MONITORADAS</span><strong>1.472</strong></div>
-<div class="info-card"><span>DADOS ANALISADOS</span><strong>2.45 TB</strong></div>
-<div class="info-card"><span>TAXA DE DETECÇÃO</span><strong>98.7%</strong></div>
+<div class="logs mono" id="logs-container"></div>
+<div class="info-grid" id="summary-grid"></div>
 </div>
-
-</div>
-
 </section>
 
-<section class="summary-grid">
-
+<section class="summary-grid secondary-grid">
 <div class="box commands-panel">
-<h2>🖥️ ÚLTIMOS COMANDOS</h2>
-<div class="terminal-commands">
-<p>netstat -an</p>
-<p>tcpdump -i any</p>
-<p>nmap -sS 127.0.0.1</p>
-<p>firewall list rules</p>
-<p>system status</p>
+<h2>Stream de telemetria</h2>
+<div class="terminal-commands mono" id="telemetry-stream"></div>
 </div>
-</div>
-
 <div class="box system-summary-panel">
-<h2>📊 RESUMO DO SISTEMA</h2>
-<div class="summary-list">
-<div><span>AMEAÇAS BLOQUEADAS</span><strong>128</strong></div>
-<div><span>CONEXÕES MONITORADAS</span><strong>1.472</strong></div>
-<div><span>DADOS ANALISADOS</span><strong>2.45 TB</strong></div>
-<div><span>TAXA DE DETECÇÃO</span><strong>98.7%</strong></div>
+<h2>Síntese operacional</h2>
+<div class="summary-list" id="operational-summary">
+<div><span>Ameaças totais (host)</span><strong class="mono" id="sum-threats">—</strong></div>
+<div><span>Último evento</span><strong class="mono" id="sum-last-ts">—</strong></div>
+<div><span>Socket</span><strong class="mono" id="sum-socket">—</strong></div>
+<div><span>API métricas</span><strong class="mono" id="sum-api">—</strong></div>
 </div>
 </div>
-
 </section>
-
-<!-- TERMINAL -->
 
 <div class="terminal">
-
-<p>root@datasentinel:~# netstat -an</p>
-
-<p>root@datasentinel:~# tcpdump -i any</p>
-
-<p>root@datasentinel:~# firewall status</p>
-
-<p>Monitorando ameaças em tempo real...</p>
-
-<span class="blink">█</span>
-
+<p class="mono" id="terminal-line-1">root@datasentinel:~ # aguardando eventos…</p>
+<p class="mono" id="terminal-line-2"></p>
+<p class="mono" id="terminal-line-3"></p>
+<span class="blink" aria-hidden="true">█</span>
 </div>
-
 </main>
-
 </div>
 
+<script src="/socket.io/socket.io.js"></script>
 <script src="script.js"></script>
-
 </body>
 </html>
