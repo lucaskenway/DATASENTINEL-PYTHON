@@ -1,8 +1,8 @@
+import os
 import time
 
 import psutil
 import requests
-import socketio
 
 from detector import detect_suspicious
 from ai_detector import ai_detect
@@ -10,12 +10,30 @@ from firewall import block_ip
 from logger import save_log
 from email_alert import send_email
 
-sio = socketio.Client()
+SERVER_URL = os.environ.get("DATASENTINEL_SERVER_URL", "http://127.0.0.1:5000")
+INGEST_TOKEN = os.environ.get("DATASENTINEL_INGEST_TOKEN")
 
-try:
-    sio.connect("http://127.0.0.1:5000")
-except Exception:
-    print("Servidor Flask nao iniciado.")
+if not INGEST_TOKEN:
+    print(
+        "[SECURITY] DATASENTINEL_INGEST_TOKEN nao definida — os alertas nao "
+        "serao enviados ao dashboard (apenas logados/bloqueados localmente). "
+        "Defina a mesma variavel usada pelo server.py."
+    )
+
+
+def push_alert(payload):
+    if not INGEST_TOKEN:
+        return
+    try:
+        requests.post(
+            f"{SERVER_URL}/api/ingest_alert",
+            json=payload,
+            headers={"Authorization": f"Bearer {INGEST_TOKEN}"},
+            timeout=4,
+        )
+    except Exception:
+        pass
+
 
 local_ips = [
     "127.0.0.1",
@@ -115,10 +133,7 @@ while True:
                         "timestamp": time.time(),
                     }
 
-                    try:
-                        sio.emit("new_alert", payload)
-                    except Exception:
-                        pass
+                    push_alert(payload)
 
         except Exception:
             pass

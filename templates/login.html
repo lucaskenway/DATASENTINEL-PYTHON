@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DataSentinel — Login</title>
+<link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@300;400;600;700;800&family=Fira+Code:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  body {
+    background: #03080d; color: #b8e8cc;
+    font-family: 'Oxanium', sans-serif;
+    display: flex; align-items: center; justify-content: center;
+    height: 100vh; margin: 0;
+    background-image: radial-gradient(circle at 50% 30%, rgba(77,255,154,0.06), transparent 60%);
+  }
+  .box {
+    background: rgba(6,16,22,0.93);
+    border: 1px solid rgba(77,255,154,0.22);
+    border-radius: 10px;
+    padding: 32px;
+    width: 320px;
+    box-shadow: 0 0 40px rgba(77,255,154,0.06);
+  }
+  .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+  h1 { font-size: 18px; margin: 0 0 2px; color: #4dff9a; font-weight: 700; }
+  p.sub { font-size: 10px; color: #4a7060; margin: 0 0 20px; letter-spacing: .1em; }
+  label { font-size: 11px; color: #4a7060; display: block; margin-bottom: 4px; letter-spacing: .04em; }
+  input {
+    width: 100%; background: rgba(77,255,154,0.04);
+    border: 1px solid rgba(77,255,154,0.12); border-radius: 6px;
+    color: #9dffc6; padding: 8px 10px; margin-bottom: 14px;
+    font-family: 'Fira Code', monospace; font-size: 13px;
+  }
+  input:focus { outline: none; border-color: rgba(77,255,154,0.5); }
+  button {
+    width: 100%; background: #4dff9a; color: #03110a;
+    border: none; border-radius: 6px; padding: 10px;
+    font-weight: 700; cursor: pointer; font-size: 13px;
+    font-family: 'Oxanium', sans-serif; letter-spacing: .04em;
+    transition: background 0.15s;
+  }
+  button:hover { background: #9dffc6; }
+  .err {
+    color: #ff4d6d; font-size: 11px; margin-bottom: 14px;
+    background: rgba(255,77,109,0.1); border: 1px solid rgba(255,77,109,0.3);
+    border-radius: 6px; padding: 8px 10px;
+  }
+</style>
+</head>
+<body>
+  <form class="box" method="post" action="{{ url_for('login', next=next_path) }}">
+    <div class="brand">
+      <svg viewBox="0 0 48 48" width="34" height="34" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs>
+          <linearGradient id="sgl" x1="8" y1="4" x2="40" y2="44" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#4dff9a"/><stop offset="1" stop-color="#0a3d24"/>
+          </linearGradient>
+        </defs>
+        <path d="M24 4 L42 10 V22 C42 34 32 42 24 44 C16 42 6 34 6 22 V10 Z" stroke="url(#sgl)" stroke-width="1.4" fill="rgba(4,18,14,0.85)"/>
+        <path d="M24 12 L34 16 V24 C34 31 27 36 24 37 C21 36 14 31 14 24 V16 Z" stroke="rgba(157,255,198,0.35)" stroke-width="0.8" fill="none"/>
+      </svg>
+      <div>
+        <h1>DataSentinel</h1>
+        <p class="sub" style="margin:0">CYBER DEFENSE SYSTEM</p>
+      </div>
+    </div>
+    {% if error %}<div class="err">{{ error }}</div>{% endif %}
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label for="username">Usuário</label>
+    <input type="text" id="username" name="username" autocomplete="username" required autofocus>
+    <label for="password">Senha</label>
+    <input type="password" id="password" name="password" autocomplete="current-password" required>
+    <button type="submit">ENTRAR</button>
+  </form>
+</body>
+</html>

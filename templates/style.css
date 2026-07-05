@@ -129,6 +129,14 @@ body {
 .clock-time { font-size: 20px; font-weight: 600; color: var(--neon); line-height: 1; letter-spacing: 0.04em; }
 .clock-date { font-size: 9.5px; color: var(--muted); letter-spacing: 0.1em; }
 
+.btn-logout {
+  background: rgba(255,77,109,0.1); border: 1px solid rgba(255,77,109,0.3);
+  color: var(--danger); border-radius: 6px; padding: 6px 12px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
+  cursor: pointer; margin-left: 14px; transition: background 0.15s;
+}
+.btn-logout:hover { background: rgba(255,77,109,0.2); }
+
 .topbar-hacker { width: 160px; height: var(--topbar-h); overflow: hidden; position: relative; flex-shrink: 0; }
 .hacker-binary {
   position: absolute; inset: 0;
@@ -418,7 +426,7 @@ body {
 .log-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 9.5px; border-bottom: 1px solid rgba(77,255,154,0.04); }
 .log-time { color: var(--muted); font-size: 9px; white-space: nowrap; }
 .log-desc { flex: 1; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.log-tag { font-size: 8px; font-weight: 700; padding: 1px 5px; border-radius: 3px; flex-shrink: 0; }
+.log-tag { font-size: 8px; font-weight: 700; padding: 1px 5px; border-radius: 3px; flex-shrink: 0; min-width: 34px; text-align: center; letter-spacing: 0.02em; }
 .log-tag-block { background: rgba(255,77,109,0.18); color: var(--danger); }
 .log-tag-warn  { background: rgba(255,152,0,0.18); color: var(--warn); }
 .log-tag-alert { background: rgba(0,210,255,0.15); color: var(--cyan); }
@@ -484,14 +492,23 @@ body {
 .log-search:focus { border-color: var(--border2); }
 .log-search::placeholder { color: var(--muted); }
 .logs-full-panel { flex: 1; }
-.logs-full-body { overflow-y: auto; flex: 1; max-height: calc(100vh - 220px); padding: 6px 12px; }
-.full-log-line { display: flex; gap: 10px; padding: 3px 0; border-bottom: 1px solid rgba(77,255,154,0.03); font-size: 9.5px; line-height: 1.5; }
-.full-log-line .fl-time { color: var(--muted); white-space: nowrap; flex-shrink: 0; font-size: 9px; }
-.full-log-line .fl-text { color: var(--text); word-break: break-all; }
-.fl-block { color: var(--danger); }
-.fl-warn  { color: var(--warn); }
-.fl-alert { color: var(--cyan); }
-.fl-info  { color: var(--neon); }
+.logs-full-body { overflow-y: auto; flex: 1; max-height: calc(100vh - 220px); padding: 8px; display: flex; flex-direction: column; gap: 2px; }
+.full-log-line {
+  display: flex; align-items: center; gap: 10px;
+  padding: 5px 10px; font-size: 9.5px; line-height: 1.5;
+  border-left: 3px solid transparent; border-radius: 4px;
+  transition: background 0.15s, border-color 0.15s;
+  animation: rowSlide 0.2s ease;
+}
+.full-log-line:nth-child(odd) { background: rgba(255,255,255,0.015); }
+.full-log-line:hover { background: rgba(77,255,154,0.06); }
+.full-log-line .fl-time { color: var(--muted); white-space: nowrap; flex-shrink: 0; font-size: 9px; min-width: 54px; }
+.full-log-line .fl-text { color: var(--text); word-break: break-all; flex: 1; }
+.full-log-line .log-tag { flex-shrink: 0; }
+.full-log-line.fl-block { border-left-color: var(--danger); }
+.full-log-line.fl-warn  { border-left-color: var(--warn); }
+.full-log-line.fl-alert { border-left-color: var(--cyan); }
+.full-log-line.fl-info  { border-left-color: var(--neon); }
 
 /* ══════════════════════════════════════════════
    REDE PAGE
