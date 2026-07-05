@@ -1,393 +1,240 @@
-# 🛡 DataSentinel - Sistema de Segurança de Rede (Python)
+# DataSentinel — Cyber Defense System
 
-Sistema inteligente de monitoramento de rede desenvolvido em Python para detectar ataques automaticamente, bloquear IPs suspeitos e exibir ameaças em tempo real em um dashboard global estilo SOC (Security Operations Center).
+<div align="center">
 
----
+![Python](https://img.shields.io/badge/Python-3.8%2B-3776ab?style=for-the-badge&logo=python&logoColor=white)
+![Flask](https://img.shields.io/badge/Flask-2.x-000000?style=for-the-badge&logo=flask&logoColor=white)
+![Socket.IO](https://img.shields.io/badge/Socket.IO-4.x-010101?style=for-the-badge&logo=socket.io&logoColor=white)
+![Leaflet](https://img.shields.io/badge/Leaflet.js-1.9-199900?style=for-the-badge&logo=leaflet&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-4dff9a?style=for-the-badge)
 
-# 🚀 Funcionalidades
+**Dashboard de monitoramento de segurança cibernética em tempo real**
 
-- 🛡 Monitoramento contínuo da rede
-- 🚨 Detecção de ataques DDoS
-- 🔎 Detecção de Port Scan
-- 🚫 Bloqueio automático de IPs
-- 🌍 Geolocalização de IPs suspeitos
-- 📊 Dashboard global em tempo real
-- 📧 Alertas automáticos por email
-- 🤖 Detecção inteligente com IA
-- 🔥 Integração com Firewall do Windows
-- ⚡ Atualização em tempo real com Socket.IO
+</div>
 
 ---
 
-# 📸 Dashboard
+## Visao Geral
 
-Acesse:
+DataSentinel e um sistema SOC *(Security Operations Center)* desenvolvido em Python com interface web moderna. Monitora tentativas de intrusao, classifica tipos de ataques, exibe localizacao geografica em mapa interativo e fornece metricas do sistema em tempo real.
 
-```txt
-http://localhost:5000
 ```
-
-O dashboard exibe:
-
-- 🌍 Mapa global de ameaças
-- 🔴 Ataques em tempo real
-- 📡 IPs suspeitos
-- ⚡ Atualizações automáticas
-- 📊 Estatísticas de ataques
-- 🛡 Monitoramento estilo SOC
-
----
-
-# 📦 Instalação
-
-## 1️⃣ Instale o Python
-
-Baixe:
-
-```txt
-https://www.python.org/downloads/
-```
-
-Durante a instalação marque:
-
-```txt
-Add Python to PATH
+┌─────────────────────────────────────────────────────────────┐
+│  DataSentinel v2.0          PROTECTED   REAL-TIME           │
+├──────────┬──────────────────────────────────────────────────┤
+│          │  [ATAQUES]  [TENTATIVAS]  [IPS]  [PROTEGIDO]     │
+│ DASHBOARD│                                                  │
+│ ATAQUES  │  ┌─── MAPA INTERATIVO ───┐  ┌── TOP IPS ──┐     │
+│ FIREWALL │  │   (Leaflet + OSM)     │  │ 1.2.3.4  9x │     │
+│ LOGS     │  │   Marcadores ao vivo  │  └─────────────┘     │
+│ REDE     │  └───────────────────────┘  ┌─ DISTRIBUICAO ─┐  │
+│ CONFIG   │  ┌─ REDE RX/TX ──────────┐  │  Donut chart   │  │
+│ SOBRE    │  └───────────────────────┘  └────────────────┘  │
+│──────────│                                                  │
+│ SISTEMA  │  [TERMINAL] datasentinel@localhost:~$            │
+└──────────┴──────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 2️⃣ Clone ou baixe o projeto
+## Funcionalidades
+
+### Dashboard Principal
+- **4 KPI cards** — Ataques bloqueados, tentativas detectadas, IPs unicos, status do sistema
+- **Mapa interativo** (Leaflet.js + OpenStreetMap) com zoom e nomes de ruas/cidades
+  - Marcadores animados nos locais dos ataques
+  - Linhas tracejadas mostrando origem ao defensor
+  - Zoom automatico ao detectar ataque, retorna a visao global apos 4s
+- **Feed de ataques** em tempo real com badges por tipo
+- **Top IPs maliciosos** com bandeiras de paises
+- **Grafico de distribuicao** (donut) por tipo de ataque
+- **Grafico de rede** TX/RX em MB/s ao longo do tempo
+- **Logs recentes** do sistema
+
+### Paginas do Sidebar
+| Pagina | Descricao |
+|--------|-----------|
+| **Ataques** | Feed completo + estatisticas por tipo de ataque |
+| **Firewall** | IPs bloqueados + tabela de regras ativas |
+| **Logs** | Visualizador completo com busca e filtro em tempo real |
+| **Rede** | Graficos de trafego RX/TX e conexoes ativas |
+| **Configuracoes** | Parametros do sistema e limiares de alerta |
+| **Sobre** | Informacoes do projeto e tecnologias |
+
+### Terminal Interativo
+Terminal embutido no rodape com suporte a comandos:
 
 ```bash
-git clone SEU_REPOSITORIO
+$ help          # Lista todos os comandos
+$ dash          # Navega para o Dashboard
+$ ataques       # Navega para Ataques
+$ firewall      # Navega para Firewall
+$ logs          # Navega para Logs
+$ rede          # Navega para Rede
+$ status        # Exibe status do sistema ao vivo
+$ alerts        # Lista ultimos alertas
+$ ips           # Lista top IPs bloqueados
+$ test          # Dispara alerta de teste
+$ test 1.2.3.4  # Dispara alerta com IP especifico
+$ clear         # Limpa o terminal
 ```
 
-ou extraia o `.zip`.
+### Metricas do Sistema (Sidebar)
+- Uso de CPU, Memoria e Disco com barras de progresso
+- Velocidade de rede TX/RX em MB/s
+- Mini grafico de tendencia de rede
+- Polling automatico a cada 2,5 segundos
 
 ---
 
-## 3️⃣ Abra no VS Code
+## Tecnologias
 
-Abra a pasta:
-
-```txt
-DataSentinel-Python
-```
-
----
-
-# ⚙ Criar Ambiente Virtual (Recomendado)
-
-No terminal do VS Code:
-
-```bash
-python -m venv .venv
-```
-
-Ativar no Windows:
-
-```bash
-.venv\Scripts\activate
-```
-
-Se funcionar aparecerá:
-
-```txt
-(.venv)
-```
+| Camada | Tecnologia |
+|--------|-----------|
+| Backend | Python 3.8+, Flask 2.x |
+| Tempo real | Flask-SocketIO, Socket.IO 4.x |
+| Metricas OS | psutil |
+| Frontend | HTML5, CSS3, JavaScript ES2020 |
+| Mapas | Leaflet.js 1.9.4 + OpenStreetMap |
+| Graficos | Chart.js 4.x |
+| Fontes | Oxanium, Fira Code, JetBrains Mono |
 
 ---
 
-# 📥 Instalar Dependências
+## Instalacao
+
+### Pre-requisitos
+- Python 3.8 ou superior
+- pip
+
+### Passos
 
 ```bash
+# Clone o repositorio
+git clone https://github.com/seu-usuario/DATASENTINEL-PYTHON.git
+cd DATASENTINEL-PYTHON
+
+# Crie e ative o ambiente virtual
+python -m venv venv
+
+# Windows
+venv\Scripts\activate
+
+# Linux / macOS
+source venv/bin/activate
+
+# Instale as dependencias
 pip install -r requirements.txt
 ```
 
-Se faltar alguma dependência:
-
-```bash
-pip install flask flask-socketio requests python-dotenv psutil eventlet numpy scikit-learn
-```
-
 ---
 
-# 📧 Configuração de Email (Opcional)
-
-Edite o arquivo:
-
-```txt
-.env
-```
-
-Exemplo:
-
-```env
-EMAIL_HOST=smtp.gmail.com
-EMAIL_PORT=587
-EMAIL_USER=seu_email@gmail.com
-EMAIL_PASS=sua_senha_de_app
-EMAIL_FROM=datasentinel@gmail.com
-EMAIL_TO=seu_email@gmail.com
-```
-
----
-
-# ▶ Executar o Dashboard
-
-No terminal:
+## Uso
 
 ```bash
+# Inicia o servidor
 python server.py
 ```
 
-Você verá:
+Acesse no navegador: **http://localhost:5000**
 
-```txt
-Running on http://127.0.0.1:5000
+### Variaveis de Ambiente (opcional)
+
+```env
+DATASENTINEL_DEF_LAT=-23.55   # Latitude do servidor defensor
+DATASENTINEL_DEF_LON=-46.63   # Longitude do servidor defensor
 ```
 
-Abra no navegador:
+### Alimentando com ataques reais
 
-```txt
-http://localhost:5000
-```
+O sistema le o arquivo `ataques.log` a cada 5 segundos. Para integrar com ferramentas reais (fail2ban, snort, etc.), redirecione os logs para `ataques.log`.
 
----
-
-# 🧪 TESTE EM TEMPO REAL
-
-O projeto possui um simulador de ataques globais.
-
----
-
-## 1️⃣ Abra OUTRO terminal no VS Code
-
-Clique em:
-
-```txt
-+
-```
-
-na área do terminal.
-
----
-
-## 2️⃣ Execute o simulador
+Ou use a rota de teste:
 
 ```bash
-python test_real_time.py
+# Alerta de teste padrao
+curl http://localhost:5000/test_alert
+
+# Alerta com IP especifico
+curl http://localhost:5000/test_alert/1.2.3.4
 ```
 
----
-
-## 3️⃣ Escolha o modo de teste
-
-### Ataques sequenciais
-
-```txt
-1
-```
-
----
-
-### Ataques paralelos (RECOMENDADO)
-
-```txt
-2
-```
-
----
-
-### Ataque contínuo
-
-```txt
-3
-```
-
-Parar:
-
-```txt
-CTRL + C
-```
-
----
-
-# 🌍 Resultado Esperado
-
-No dashboard você verá:
-
-- 🔴 ataques aparecendo no mapa
-- 🌎 IPs de vários países
-- 📡 atualização em tempo real
-- 📊 contador de ataques
-- 💥 marcadores de ameaça
-- ⚡ animações de ataque
-
----
-
-# ⚠ Caso o mapa não funcione
-
-Verifique se o `server.py` possui:
+Emitir alerta via Socket.IO (Python):
 
 ```python
-@app.route('/test/<ip>')
-```
+import socketio
 
-e:
-
-```python
-socketio.emit("attack", ...)
-```
-
----
-
-# 🧪 Teste dos Módulos
-
-Execute:
-
-```bash
-python test_system.py
-```
-
-Resultado esperado:
-
-```txt
-✅ Detector funcionando!
-✅ AI Detector funcionando!
-✅ Firewall funcionando!
-✅ Logger funcionando!
-✅ Email configurado!
+sio = socketio.Client()
+sio.connect('http://localhost:5000')
+sio.emit('new_alert', {
+    "ip": "1.2.3.4",
+    "country": "Brasil",
+    "lat": -23.55,
+    "lon": -46.63,
+    "type": "brute_force",
+    "message": "BLOCK | SSH Brute Force | IP 1.2.3.4"
+})
 ```
 
 ---
 
-# 📁 Estrutura do Projeto
+## Estrutura do Projeto
 
-```txt
-DataSentinel-Python/
-│
-├── monitor.py
-├── detector.py
-├── ai_detector.py
-├── firewall.py
-├── logger.py
-├── email_alert.py
-├── server.py
-├── test_real_time.py
-├── test_system.py
-├── requirements.txt
-├── README.md
-├── .env
-│
-├── templates/
-│   └── index.html
-│
-└── logs/
+```
+DATASENTINEL-PYTHON/
+├── server.py              # Backend Flask + Socket.IO + API
+├── requirements.txt       # Dependencias Python
+├── ataques.log            # Log de ataques (lido em tempo real)
+└── templates/
+    ├── index.html         # Estrutura HTML do dashboard
+    ├── style.css          # Estilizacao (tema dark cyber)
+    └── script.js          # Logica frontend (Leaflet, Chart.js, Socket.IO)
 ```
 
 ---
 
-# 🏗 Arquitetura
+## API
 
-```txt
-Cliente
-   ↓
-Monitor de Rede
-   ↓
-Detector de Ataques
-   ↓
-IA de Análise
-   ↓
-Firewall
-   ↓
-Dashboard + Logs + Email
+| Endpoint | Metodo | Descricao |
+|----------|--------|-----------|
+| `/` | GET | Dashboard principal |
+| `/api/metrics` | GET | Metricas do sistema (CPU, RAM, rede, etc.) |
+| `/api/logs?n=60` | GET | Ultimas N linhas do log |
+| `/test_alert` | GET | Dispara alerta de teste |
+| `/test_alert/<ip>` | GET | Dispara alerta com IP especifico |
+
+### Exemplo de resposta `/api/metrics`
+
+```json
+{
+  "cpu": 12.5,
+  "memory": 67.3,
+  "disk": 56.2,
+  "network_activity": 4.1,
+  "net_tx_mbps": 0.08,
+  "net_rx_mbps": 0.14,
+  "connections_active": 42,
+  "threats_total": 128,
+  "defender": { "lat": -23.55, "lon": -46.63 },
+  "ts": 1751670000.0
+}
 ```
 
 ---
 
-# 🔥 Tecnologias Utilizadas
+## Tipos de Ataque Detectados
 
-| Tecnologia | Uso |
-|---|---|
-| Python | Backend |
-| Flask | Dashboard |
-| Flask-SocketIO | Tempo real |
-| Leaflet.js | Mapa global |
-| requests | Geolocalização |
-| psutil | Monitoramento |
-| threading | Paralelismo |
-| subprocess | Firewall |
-| scikit-learn | IA |
+| Badge | Tipo | Cor |
+|-------|------|-----|
+| `BRUTE FORCE` | SSH, RDP, forca bruta | Vermelho |
+| `SQL INJECTION` | Injecao SQL | Laranja |
+| `PORT SCAN` | Varredura de portas | Ciano |
+| `XSS ATTEMPT` | Cross-site scripting | Verde |
+| `DDoS` | Negacao de servico | Roxo |
+| `OUTROS` | Outros ataques | Cinza |
 
 ---
 
-# 🔒 Segurança
+## Licenca
 
-O sistema:
-
-- Ignora IPs locais
-- Ignora IPs privados
-- Analisa padrões suspeitos
-- Bloqueia IPs automaticamente
-- Registra logs detalhados
-- Possui sistema de risco
-
----
-
-# 📊 Exemplo de Log
-
-```txt
-[2026-05-06 20:30:15]
-IP: 185.45.10.21
-Ataque: Port Scan
-País: Russia
-Risco: HIGH
-Ação: BLOCKED
-```
-
----
-
-# 🤖 Inteligência Artificial
-
-O módulo de IA analisa:
-
-- Frequência de conexões
-- Número de portas acessadas
-- Comportamento suspeito
-- Padrões anormais de tráfego
-
----
-
-# 🚀 Expansão Futura
-
-- 🌐 Threat Intelligence
-- 🛰 Radar Global
-- 🔥 Heatmap de ataques
-- 🤖 Machine Learning avançado
-- 🛡 IDS/IPS profissional
-- 🐳 Docker
-- ☸ Kubernetes
-- 📊 SIEM Integration
-
----
-
-# 👨‍💻 Autor
-
-## Weslley Lucas Souza Alves
-
-Projeto desenvolvido para estudos de:
-
-- Cybersecurity
-- Redes
-- Python
-- Inteligência Artificial
-- Defesa de Sistemas
-
----
-
-# 🛡 DataSentinel
-
-```txt
-Monitorando. Detectando. Protegendo.
-```
+MIT 2025 — DataSentinel Cyber Defense System

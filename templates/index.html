@@ -3,254 +3,621 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DataSentinel SOC</title>
+<title>DataSentinel - Cyber Defense System</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <link rel="stylesheet" href="style.css">
-<link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@300;400;600;700&family=Fira+Code:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@300;400;600;700;800&family=Fira+Code:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 </head>
 <body>
 <div class="tech-bg" aria-hidden="true">
-<div class="tech-grid"></div>
-<div class="tech-binary"></div>
-<div class="tech-vignette-inner"></div>
+  <div class="tech-grid"></div>
+  <div class="tech-binary"></div>
+  <div class="tech-vignette-inner"></div>
 </div>
 <div class="scanlines" aria-hidden="true"></div>
 <div class="vignette" aria-hidden="true"></div>
 
-<div class="container">
-<aside class="sidebar">
-<div class="sidebar-brand">
-<div class="brand-shield" aria-hidden="true">
-<svg viewBox="0 0 48 48" width="44" height="44" fill="none" xmlns="http://www.w3.org/2000/svg">
-<defs>
-<linearGradient id="sg" x1="8" y1="4" x2="40" y2="44" gradientUnits="userSpaceOnUse">
-<stop stop-color="#4dff9a"/><stop offset="1" stop-color="#0a3d24"/>
-</linearGradient>
-<filter id="glow"><feGaussianBlur stdDeviation="1.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-</defs>
-<path d="M24 4 L42 10 V22 C42 34 32 42 24 44 C16 42 6 34 6 22 V10 Z" stroke="url(#sg)" stroke-width="1.4" fill="rgba(4,18,14,0.85)" filter="url(#glow)"/>
-<path d="M24 12 L34 16 V24 C34 31 27 36 24 37 C21 36 14 31 14 24 V16 Z" stroke="rgba(157,255,198,0.35)" stroke-width="0.8" fill="none"/>
-</svg>
-</div>
-<div class="brand-text">
-<div class="logo">DATASENTINEL</div>
-<div class="subtitle">Security Operations Center</div>
-</div>
-</div>
-<div class="sidebar-divider hud-line"><span class="mono">NODE · SOC-01</span></div>
+<div class="app-wrapper">
 
-<ul class="menu" role="navigation">
-<li class="active" data-section="dash">
-<span class="nav-ico" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 10.5L12 4l8 6.5V20a1 1 0 01-1 1h-5v-6H10v6H5a1 1 0 01-1-1v-9.5z"/></svg></span>
-<div class="nav-copy"><strong>Dashboard</strong><span>Visão geral</span></div>
-</li>
-<li data-section="alerts">
-<span class="nav-ico" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 22a2 2 0 002-2H10a2 2 0 002 2zm6-6V11a6 6 0 10-12 0v5L4 18h16l-2-2z"/></svg></span>
-<div class="nav-copy"><strong>Alertas</strong><span>Tempo real</span></div>
-</li>
-<li data-section="firewall">
-<span class="nav-ico" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span>
-<div class="nav-copy"><strong>Firewall</strong><span>Bloqueios</span></div>
-</li>
-<li data-section="logs">
-<span class="nav-ico" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 6h16M4 12h10M4 18h14"/></svg></span>
-<div class="nav-copy"><strong>Logs</strong><span>Eventos</span></div>
-</li>
-<li data-section="net">
-<span class="nav-ico" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><path d="M2 12h3m14 0h3M12 2v3m0 14v3M4.93 4.93l2.12 2.12m9.9 9.9l2.12 2.12M4.93 19.07l2.12-2.12m9.9-9.9l2.12-2.12"/></svg></span>
-<div class="nav-copy"><strong>Rede</strong><span>Monitoramento</span></div>
-</li>
-<li data-section="config">
-<span class="nav-ico" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41m11.32-11.32l1.41-1.41"/></svg></span>
-<div class="nav-copy"><strong>Config</strong><span>Sistema</span></div>
-</li>
-</ul>
+  <!-- ─── TOP HEADER BAR ─── -->
+  <header class="topbar">
+    <div class="topbar-brand">
+      <div class="brand-shield" aria-hidden="true">
+        <svg viewBox="0 0 48 48" width="42" height="42" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="sg" x1="8" y1="4" x2="40" y2="44" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#4dff9a"/><stop offset="1" stop-color="#0a3d24"/>
+            </linearGradient>
+            <filter id="sg-glow"><feGaussianBlur stdDeviation="1.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          </defs>
+          <path d="M24 4 L42 10 V22 C42 34 32 42 24 44 C16 42 6 34 6 22 V10 Z" stroke="url(#sg)" stroke-width="1.4" fill="rgba(4,18,14,0.85)" filter="url(#sg-glow)"/>
+          <path d="M24 12 L34 16 V24 C34 31 27 36 24 37 C21 36 14 31 14 24 V16 Z" stroke="rgba(157,255,198,0.35)" stroke-width="0.8" fill="none"/>
+        </svg>
+      </div>
+      <div class="brand-text">
+        <div class="topbar-logo">DataSentinel</div>
+        <div class="topbar-sub">CYBER DEFENSE SYSTEM</div>
+      </div>
+    </div>
+    <div class="topbar-center">
+      <div class="topbar-stat-block">
+        <div class="tstat-label">SYSTEM STATUS</div>
+        <div class="tstat-value protected"><span class="tstat-dot" aria-hidden="true"></span>PROTECTED</div>
+      </div>
+      <div class="topbar-divider" aria-hidden="true"></div>
+      <div class="topbar-stat-block">
+        <div class="tstat-label">ACTIVE MODE</div>
+        <div class="tstat-value cyan" id="socket-status">REAL-TIME MONITORING</div>
+      </div>
+    </div>
+    <div class="topbar-clock">
+      <div class="clock-time mono" id="clock-time">--:--:--</div>
+      <div class="clock-date mono" id="clock-date">--/--/----</div>
+    </div>
+    <div class="topbar-hacker" aria-hidden="true">
+      <div class="hacker-binary" id="hackerBinary"></div>
+      <div class="hacker-fig"></div>
+    </div>
+  </header>
 
-<div class="system-box">
-<h3>Saúde do host</h3>
-<div class="status-item">
-<small>CPU</small>
-<div class="progress"><div id="bar-cpu" style="width:0%"></div></div>
-<span class="stat-readout mono" id="readout-cpu">—</span>
-</div>
-<div class="status-item">
-<small>Memória</small>
-<div class="progress"><div id="bar-mem" style="width:0%"></div></div>
-<span class="stat-readout mono" id="readout-mem">—</span>
-</div>
-<div class="status-item">
-<small>Atividade de rede</small>
-<div class="progress"><div id="bar-net" style="width:0%"></div></div>
-<span class="stat-readout mono" id="readout-net">—</span>
-</div>
-<p class="hud-micro mono" id="metric-latency">polling…</p>
-</div>
-</aside>
+  <!-- ─── LAYOUT: SIDEBAR + MAIN ─── -->
+  <div class="layout">
 
-<main class="main">
-<header class="header">
-<div>
-<h1>Security dashboard</h1>
-<p id="subtitle-main">Fluxo correlacionado ao backend · Socket.IO ativo</p>
-</div>
-<div class="header-right">
-<div class="top-terminal mono" id="session-line">root@datasentinel:~ # session</div>
-<p class="mono" id="clock">—</p>
-<p class="online" id="socket-status">socket: conectando…</p>
-</div>
-</header>
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <ul class="menu" role="navigation">
+        <li class="active" data-section="dash">
+          <span class="nav-ico" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <rect x="3" y="3" width="7" height="7" rx="1.5"/>
+              <rect x="14" y="3" width="7" height="7" rx="1.5"/>
+              <rect x="3" y="14" width="7" height="7" rx="1.5"/>
+              <rect x="14" y="14" width="7" height="7" rx="1.5"/>
+            </svg>
+          </span>
+          <div class="nav-copy"><strong>DASHBOARD</strong><span>VISÃO GERAL</span></div>
+        </li>
+        <li data-section="ataques">
+          <span class="nav-ico" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+            </svg>
+          </span>
+          <div class="nav-copy"><strong>ATAQUES</strong><span>TEMPO REAL</span></div>
+        </li>
+        <li data-section="firewall">
+          <span class="nav-ico" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+          </span>
+          <div class="nav-copy"><strong>FIREWALL</strong><span>REGRAS E BLOQUEIOS</span></div>
+        </li>
+        <li data-section="logs">
+          <span class="nav-ico" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M4 6h16M4 12h10M4 18h14"/>
+            </svg>
+          </span>
+          <div class="nav-copy"><strong>LOGS</strong><span>EVENTOS DO SISTEMA</span></div>
+        </li>
+        <li data-section="net">
+          <span class="nav-ico" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/>
+              <path d="M12 7v5M12 12L5 17M12 12l7 5"/>
+            </svg>
+          </span>
+          <div class="nav-copy"><strong>REDE</strong><span>MONITORAMENTO</span></div>
+        </li>
+        <li data-section="config">
+          <span class="nav-ico" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41m11.32-11.32l1.41-1.41"/>
+            </svg>
+          </span>
+          <div class="nav-copy"><strong>CONFIGURAÇÕES</strong><span>SISTEMA</span></div>
+        </li>
+        <li data-section="sobre">
+          <span class="nav-ico" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 8v4m0 4h.01"/>
+            </svg>
+          </span>
+          <div class="nav-copy"><strong>SOBRE</strong><span>DATASENTINEL</span></div>
+        </li>
+      </ul>
 
-<section class="cards" aria-label="Indicadores">
-<div class="card">
-<div class="card-hud"><span class="mono">LIVE</span><span class="card-chip mono" id="pulse-connections">●</span></div>
-<h3>Conexões ativas</h3>
-<div class="value mono" id="metric-connections">—</div>
-<div class="card-trend mono" id="trend-connections"><span class="trend-val">—</span><span class="trend-label">vs amostra inicial</span></div>
-<div class="sparkline" id="spark-connections" aria-hidden="true"></div>
-</div>
-<div class="card">
-<div class="card-hud"><span class="mono">HOST</span><span class="card-chip mono" id="pulse-threats">●</span></div>
-<h3>Ameaças (servidor)</h3>
-<div class="value mono" id="metric-threats">—</div>
-<div class="card-trend mono" id="trend-threats"><span class="trend-val">—</span><span class="trend-label">vs amostra inicial</span></div>
-<div class="sparkline" id="spark-threats" aria-hidden="true"></div>
-</div>
-<div class="card">
-<div class="card-hud"><span class="mono">SESSÃO</span><span class="card-chip mono" id="pulse-sources">●</span></div>
-<h3>Fontes únicas (sessão)</h3>
-<div class="value mono" id="metric-unique-ips">0</div>
-<div class="card-trend mono" id="trend-unique"><span class="trend-val">—</span><span class="trend-label">vs amostra inicial</span></div>
-<div class="sparkline" id="spark-sources" aria-hidden="true"></div>
-</div>
-<div class="card">
-<div class="card-hud"><span class="mono">GEO</span><span class="card-chip mono" id="pulse-countries">●</span></div>
-<h3>Países distintos</h3>
-<div class="value mono" id="metric-countries">0</div>
-<div class="card-trend mono" id="trend-countries"><span class="trend-val">—</span><span class="trend-label">vs amostra inicial</span></div>
-<div class="sparkline" id="spark-countries" aria-hidden="true"></div>
-</div>
-</section>
+      <div class="sistema-box">
+        <h3 class="sistema-title">SISTEMA</h3>
+        <div class="sistema-item">
+          <div class="sistema-row"><span>CPU USO</span><span class="mono" id="readout-cpu">—</span></div>
+          <div class="progress"><div id="bar-cpu" style="width:0%"></div></div>
+        </div>
+        <div class="sistema-item">
+          <div class="sistema-row"><span>MEMÓRIA</span><span class="mono" id="readout-mem">—</span></div>
+          <div class="progress"><div id="bar-mem" style="width:0%"></div></div>
+        </div>
+        <div class="sistema-item">
+          <div class="sistema-row"><span>DISCO</span><span class="mono" id="readout-disk">—</span></div>
+          <div class="progress"><div id="bar-disk" style="width:0%"></div></div>
+        </div>
+        <div class="sistema-item">
+          <div class="sistema-row"><span>REDE (TX/RX)</span></div>
+          <div class="net-speeds">
+            <span class="mono net-rx-val" id="net-rx">— MB/s</span>
+            <span class="mono net-tx-val" id="net-tx">— MB/s</span>
+          </div>
+          <div class="net-mini"><canvas id="miniTrend" height="36"></canvas></div>
+        </div>
+        <p class="sys-note mono" id="metric-latency">polling…</p>
+      </div>
+    </aside>
 
-<section class="dashboard">
-<div class="box map-panel">
-<div class="box-header">
-<h2>Mapa tático · correlação geográfica</h2>
-<div class="header-chips">
-<span class="tag mono" id="map-mode">WGS84 → painel</span>
-<span class="status-badge live">live</span>
-</div>
+    <!-- ─── MAIN CONTENT ─── -->
+    <main class="main">
+
+      <!-- ═══════════════════════════════════════════
+           SEÇÃO: DASHBOARD
+      ═══════════════════════════════════════════ -->
+      <section class="section-content active" data-section="dash">
+        <section class="cards" aria-label="Indicadores">
+          <div class="kpi kpi-red">
+            <div class="kpi-label">ATAQUES BLOQUEADOS</div>
+            <div class="kpi-value mono" id="metric-threats">—</div>
+            <div class="kpi-sub mono"><span id="sub-threats">+0</span> hoje</div>
+            <div class="kpi-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            </div>
+          </div>
+          <div class="kpi kpi-orange">
+            <div class="kpi-label">TENTATIVAS DETECTADAS</div>
+            <div class="kpi-value mono" id="metric-connections">—</div>
+            <div class="kpi-sub mono"><span id="sub-connections">+0</span> hoje</div>
+            <div class="kpi-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.4">
+                <circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="7" stroke-dasharray="2 2"/>
+                <line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/>
+                <line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/>
+              </svg>
+            </div>
+          </div>
+          <div class="kpi kpi-red">
+            <div class="kpi-label">IP'S BLOQUEADOS</div>
+            <div class="kpi-value mono" id="metric-unique-ips">0</div>
+            <div class="kpi-sub mono"><span id="sub-ips">+0</span> hoje</div>
+            <div class="kpi-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+            </div>
+          </div>
+          <div class="kpi kpi-green">
+            <div class="kpi-label">STATUS DO SISTEMA</div>
+            <div class="kpi-value-lg mono">PROTEGIDO</div>
+            <div class="kpi-sub-green mono">100%</div>
+            <div class="kpi-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
+            </div>
+          </div>
+        </section>
+
+        <div class="content-grid">
+          <!-- MAP + LOG -->
+          <div class="panel map-panel">
+            <div class="panel-header">
+              <h2>ATAQUES EM TEMPO REAL</h2>
+              <select class="region-select mono" id="map-mode"><option>MUNDO ▾</option></select>
+            </div>
+            <div class="map-leaflet-wrap">
+              <div id="threat-map" class="leaflet-map-container" aria-label="Mapa de ataques"></div>
+              <div class="map-overlays" aria-hidden="true">
+                <div class="radar"></div>
+                <div class="map-frame-corner tl"></div>
+                <div class="map-frame-corner tr"></div>
+                <div class="map-frame-corner bl"></div>
+                <div class="map-frame-corner br"></div>
+                <div class="map-hud-corner tl mono">WGS84 · SRC</div>
+                <div class="map-hud-corner br mono">CORREL · DST</div>
+                <div class="map-label" id="mapLabel" aria-live="polite">Aguardando ataques…</div>
+              </div>
+            </div>
+            <div class="attack-log">
+              <div class="attack-log-header mono">
+                <span>HORA</span><span>TIPO</span><span>DESCRIÇÃO</span><span>IP</span><span>PAÍS</span>
+              </div>
+              <div class="attack-log-body mono" id="alerts-feed"></div>
+            </div>
+          </div>
+
+          <!-- RIGHT: TOP IPs + DONUT -->
+          <div class="right-col">
+            <div class="panel top-ips-panel">
+              <div class="panel-header"><h2>TOP IP'S MALICIOSOS</h2></div>
+              <div class="ips-list" id="ips-list"></div>
+            </div>
+            <div class="panel donut-panel">
+              <div class="panel-header"><h2>DISTRIBUIÇÃO DE ATAQUES</h2></div>
+              <div class="donut-area">
+                <div class="donut-chart-wrap"><canvas id="socDonut" aria-label="Distribuição de tipos de ataque"></canvas></div>
+                <div class="donut-legend" id="donut-legend"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="bottom-grid">
+          <div class="panel net-panel">
+            <div class="panel-header">
+              <h2>USO DE REDE</h2>
+              <div class="net-legend">
+                <span class="net-dot green"></span><span class="mono">RECEBIMENTO</span>
+                <span class="net-dot cyan"></span><span class="mono">ENVIO</span>
+              </div>
+            </div>
+            <div class="graph"><canvas id="networkChart"></canvas></div>
+          </div>
+          <div class="panel logs-panel">
+            <div class="panel-header">
+              <h2>LOGS RECENTES</h2>
+              <button type="button" class="btn-ver-todos mono" id="btn-clear-alerts">VER TODOS</button>
+            </div>
+            <div class="recent-logs mono" id="logs-container"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════
+           SEÇÃO: ATAQUES
+      ═══════════════════════════════════════════ -->
+      <section class="section-content" data-section="ataques">
+        <div class="page-header">
+          <div><h1>ATAQUES</h1><p>Fluxo de ataques detectados em tempo real</p></div>
+          <span class="live-badge mono">● LIVE</span>
+        </div>
+        <div class="ataques-grid">
+          <div class="panel ataques-feed-panel">
+            <div class="panel-header"><h2>EVENTOS RECENTES</h2></div>
+            <div class="attack-log-header mono">
+              <span>HORA</span><span>TIPO</span><span>DESCRIÇÃO</span><span>IP</span><span>PAÍS</span>
+            </div>
+            <div class="attacks-full-feed mono" id="attacks-page-feed"></div>
+          </div>
+          <div class="ataques-right">
+            <div class="panel">
+              <div class="panel-header"><h2>TIPOS DE ATAQUE</h2></div>
+              <div class="attack-type-list" id="attack-type-list"></div>
+              <div style="height:160px;margin-top:12px">
+                <canvas id="attacks-page-donut" aria-label="Distribuição por tipo"></canvas>
+              </div>
+            </div>
+            <div class="panel atk-stats-panel">
+              <div class="panel-header"><h2>ESTATÍSTICAS</h2></div>
+              <div class="stat-rows">
+                <div class="stat-row"><span>Total eventos</span><strong class="mono" id="atk-total">0</strong></div>
+                <div class="stat-row"><span>IPs únicos</span><strong class="mono" id="atk-ips">0</strong></div>
+                <div class="stat-row"><span>Países</span><strong class="mono" id="atk-countries">0</strong></div>
+                <div class="stat-row"><span>Último evento</span><strong class="mono" id="atk-last">—</strong></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════
+           SEÇÃO: FIREWALL
+      ═══════════════════════════════════════════ -->
+      <section class="section-content" data-section="firewall">
+        <div class="page-header">
+          <div><h1>FIREWALL</h1><p>Regras ativas e IPs bloqueados</p></div>
+          <span class="status-chip green mono">● ATIVO</span>
+        </div>
+        <div class="fw-kpi-row">
+          <div class="mini-kpi"><div class="mini-kpi-val mono" id="fw-blocked">0</div><div class="mini-kpi-label">IPs Bloqueados</div></div>
+          <div class="mini-kpi"><div class="mini-kpi-val mono">7</div><div class="mini-kpi-label">Regras Ativas</div></div>
+          <div class="mini-kpi"><div class="mini-kpi-val mono green">ATIVO</div><div class="mini-kpi-label">Status</div></div>
+          <div class="mini-kpi"><div class="mini-kpi-val mono" id="fw-threats">0</div><div class="mini-kpi-label">Ameaças Bloq.</div></div>
+        </div>
+        <div class="fw-grid">
+          <div class="panel fw-ips-panel">
+            <div class="panel-header"><h2>IPS BLOQUEADOS</h2><span class="badge-count mono" id="fw-ip-count">0</span></div>
+            <div class="fw-ips-list mono" id="fw-ips-list">
+              <div class="empty-state">Aguardando eventos de rede…</div>
+            </div>
+          </div>
+          <div class="panel fw-rules-panel">
+            <div class="panel-header"><h2>REGRAS ATIVAS</h2></div>
+            <table class="fw-table mono">
+              <thead><tr><th>ID</th><th>AÇÃO</th><th>ORIGEM</th><th>ALVO</th><th>STATUS</th><th>EVENTOS</th></tr></thead>
+              <tbody>
+                <tr><td>001</td><td class="deny">DENY</td><td>0.0.0.0/0</td><td>TCP:22</td><td class="active">ATIVO</td><td id="fw-r1">—</td></tr>
+                <tr><td>002</td><td class="deny">DENY</td><td>0.0.0.0/0</td><td>TCP:3389</td><td class="active">ATIVO</td><td>—</td></tr>
+                <tr><td>003</td><td class="deny">DENY</td><td>0.0.0.0/0</td><td>SQLi Pattern</td><td class="active">ATIVO</td><td>—</td></tr>
+                <tr><td>004</td><td class="deny">DENY</td><td>0.0.0.0/0</td><td>Brute Force</td><td class="active">ATIVO</td><td>—</td></tr>
+                <tr><td>005</td><td class="deny">DENY</td><td>0.0.0.0/0</td><td>XSS Pattern</td><td class="active">ATIVO</td><td>—</td></tr>
+                <tr><td>006</td><td class="allow">ALLOW</td><td>192.168.1.0/24</td><td>Any</td><td class="active">ATIVO</td><td>—</td></tr>
+                <tr><td>007</td><td class="allow">ALLOW</td><td>Localhost</td><td>Any</td><td class="active">ATIVO</td><td>—</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════
+           SEÇÃO: LOGS
+      ═══════════════════════════════════════════ -->
+      <section class="section-content" data-section="logs">
+        <div class="page-header">
+          <div><h1>LOGS</h1><p>Eventos do sistema · ataques.log</p></div>
+          <div class="log-controls">
+            <input type="search" class="log-search mono" id="log-search" placeholder="Filtrar logs…"/>
+            <button type="button" class="btn-ver-todos mono" id="btn-refresh-logs">↻ ATUALIZAR</button>
+          </div>
+        </div>
+        <div class="panel logs-full-panel">
+          <div class="panel-header">
+            <h2>EVENTOS DO SISTEMA</h2>
+            <span class="mono muted" id="log-count">0 linhas</span>
+          </div>
+          <div class="logs-full-body mono" id="logs-full-container"></div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════
+           SEÇÃO: REDE
+      ═══════════════════════════════════════════ -->
+      <section class="section-content" data-section="net">
+        <div class="page-header">
+          <div><h1>REDE</h1><p>Monitoramento de tráfego e conexões</p></div>
+        </div>
+        <div class="net-kpi-row">
+          <div class="mini-kpi"><div class="mini-kpi-val mono green" id="net-rx-kpi">— MB/s</div><div class="mini-kpi-label">Recebimento</div></div>
+          <div class="mini-kpi"><div class="mini-kpi-val mono cyan" id="net-tx-kpi">— MB/s</div><div class="mini-kpi-label">Envio</div></div>
+          <div class="mini-kpi"><div class="mini-kpi-val mono" id="net-conns-kpi">—</div><div class="mini-kpi-label">Conexões Ativas</div></div>
+          <div class="mini-kpi"><div class="mini-kpi-val mono" id="net-cpu-kpi">—</div><div class="mini-kpi-label">CPU</div></div>
+        </div>
+        <div class="net-charts-grid">
+          <div class="panel">
+            <div class="panel-header">
+              <h2>TRÁFEGO DE REDE</h2>
+              <div class="net-legend">
+                <span class="net-dot green"></span><span class="mono">RX</span>
+                <span class="net-dot cyan"></span><span class="mono">TX</span>
+              </div>
+            </div>
+            <div class="graph-tall"><canvas id="netPageChart"></canvas></div>
+          </div>
+          <div class="panel">
+            <div class="panel-header"><h2>CONEXÕES ATIVAS</h2></div>
+            <div class="graph-tall"><canvas id="connsPageChart"></canvas></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════
+           SEÇÃO: CONFIGURAÇÕES
+      ═══════════════════════════════════════════ -->
+      <section class="section-content" data-section="config">
+        <div class="page-header">
+          <div><h1>CONFIGURAÇÕES</h1><p>Parâmetros do sistema DataSentinel</p></div>
+        </div>
+        <div class="config-grid">
+          <div class="panel config-panel">
+            <div class="panel-header"><h2>SISTEMA</h2></div>
+            <div class="config-form">
+              <div class="config-field">
+                <label class="config-label">Arquivo de Log</label>
+                <input type="text" class="config-input mono" value="ataques.log" readonly/>
+              </div>
+              <div class="config-field">
+                <label class="config-label">Intervalo de Polling (ms)</label>
+                <input type="number" class="config-input mono" id="cfg-poll" value="2000" min="500" max="30000"/>
+              </div>
+              <div class="config-field">
+                <label class="config-label">Coordenadas do Defensor (Lat)</label>
+                <input type="number" class="config-input mono" id="cfg-lat" value="-23.55" step="0.01"/>
+              </div>
+              <div class="config-field">
+                <label class="config-label">Coordenadas do Defensor (Lon)</label>
+                <input type="number" class="config-input mono" id="cfg-lon" value="-46.63" step="0.01"/>
+              </div>
+              <div class="config-field">
+                <label class="config-label">Máx. Alertas no Painel</label>
+                <input type="number" class="config-input mono" id="cfg-max-alerts" value="30" min="10" max="200"/>
+              </div>
+            </div>
+          </div>
+          <div class="panel config-panel">
+            <div class="panel-header"><h2>ALERTAS E LIMIARES</h2></div>
+            <div class="config-form">
+              <div class="config-field">
+                <label class="config-label">Alerta de CPU (%)</label>
+                <input type="number" class="config-input mono" value="85" min="50" max="99"/>
+              </div>
+              <div class="config-field">
+                <label class="config-label">Alerta de Memória (%)</label>
+                <input type="number" class="config-input mono" value="90" min="50" max="99"/>
+              </div>
+              <div class="config-field">
+                <label class="config-label">Nível de Severidade</label>
+                <select class="config-select mono">
+                  <option>CRÍTICO</option>
+                  <option>ALTO</option>
+                  <option selected>MÉDIO</option>
+                  <option>BAIXO</option>
+                </select>
+              </div>
+              <div class="config-field">
+                <label class="config-label">Modo de Operação</label>
+                <select class="config-select mono">
+                  <option selected>MONITORAMENTO</option>
+                  <option>BLOQUEIO ATIVO</option>
+                  <option>MODO STEALTH</option>
+                </select>
+              </div>
+            </div>
+            <button type="button" class="btn-save mono">💾 SALVAR CONFIGURAÇÕES</button>
+          </div>
+          <div class="panel config-status-panel">
+            <div class="panel-header"><h2>STATUS DE CONEXÃO</h2></div>
+            <div class="conn-status-list">
+              <div class="conn-status-row">
+                <span>Socket.IO</span>
+                <span class="mono status-ok" id="cfg-socket-status">CONECTADO</span>
+              </div>
+              <div class="conn-status-row">
+                <span>API /metrics</span>
+                <span class="mono status-ok">ONLINE</span>
+              </div>
+              <div class="conn-status-row">
+                <span>API /logs</span>
+                <span class="mono status-ok">ONLINE</span>
+              </div>
+              <div class="conn-status-row">
+                <span>Tempo de resposta</span>
+                <span class="mono" id="cfg-latency">—</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════
+           SEÇÃO: SOBRE
+      ═══════════════════════════════════════════ -->
+      <section class="section-content" data-section="sobre">
+        <div class="about-page">
+          <div class="about-hero">
+            <div class="about-shield" aria-hidden="true">
+              <svg viewBox="0 0 48 48" width="80" height="80" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <defs><linearGradient id="sg2" x1="8" y1="4" x2="40" y2="44" gradientUnits="userSpaceOnUse"><stop stop-color="#4dff9a"/><stop offset="1" stop-color="#0a3d24"/></linearGradient></defs>
+                <path d="M24 4 L42 10 V22 C42 34 32 42 24 44 C16 42 6 34 6 22 V10 Z" stroke="url(#sg2)" stroke-width="1.4" fill="rgba(4,18,14,0.85)"/>
+                <path d="M24 12 L34 16 V24 C34 31 27 36 24 37 C21 36 14 31 14 24 V16 Z" stroke="rgba(157,255,198,0.35)" stroke-width="0.8" fill="none"/>
+              </svg>
+            </div>
+            <div>
+              <h1 class="about-title">DataSentinel</h1>
+              <p class="about-subtitle">CYBER DEFENSE SYSTEM · v2.0</p>
+            </div>
+          </div>
+          <div class="about-grid">
+            <div class="panel about-panel">
+              <div class="panel-header"><h2>SOBRE O PROJETO</h2></div>
+              <p class="about-text">
+                DataSentinel é um sistema de monitoramento de segurança cibernética em tempo real,
+                desenvolvido com Python (Flask + Socket.IO) e JavaScript. Monitora tentativas de
+                intrusão, analisa padrões de ataques e exibe visualizações geográficas ao vivo.
+              </p>
+              <div class="about-tags">
+                <span class="tech-tag mono">Python</span>
+                <span class="tech-tag mono">Flask</span>
+                <span class="tech-tag mono">Socket.IO</span>
+                <span class="tech-tag mono">Leaflet.js</span>
+                <span class="tech-tag mono">Chart.js</span>
+                <span class="tech-tag mono">psutil</span>
+              </div>
+            </div>
+            <div class="panel about-panel">
+              <div class="panel-header"><h2>INFORMAÇÕES DO SISTEMA</h2></div>
+              <div class="about-info-list">
+                <div class="about-info-row"><span>Versão</span><strong class="mono">2.0.0</strong></div>
+                <div class="about-info-row"><span>Backend</span><strong class="mono">Python / Flask</strong></div>
+                <div class="about-info-row"><span>Real-time</span><strong class="mono">Socket.IO</strong></div>
+                <div class="about-info-row"><span>Mapa</span><strong class="mono">Leaflet + OpenStreetMap</strong></div>
+                <div class="about-info-row"><span>Métricas</span><strong class="mono">psutil</strong></div>
+                <div class="about-info-row"><span>Uptime</span><strong class="mono" id="about-uptime">—</strong></div>
+              </div>
+            </div>
+            <div class="panel about-panel about-capabilities">
+              <div class="panel-header"><h2>CAPACIDADES</h2></div>
+              <ul class="capability-list">
+                <li><span class="cap-dot green"></span>Monitoramento de ataques em tempo real via Socket.IO</li>
+                <li><span class="cap-dot green"></span>Mapa interativo com geolocalização de ataques</li>
+                <li><span class="cap-dot green"></span>Métricas de sistema (CPU, RAM, Disco, Rede)</li>
+                <li><span class="cap-dot green"></span>Classificação automática de tipos de ataque</li>
+                <li><span class="cap-dot green"></span>Top IPs maliciosos por frequência</li>
+                <li><span class="cap-dot green"></span>Distribuição geográfica e por tipo de ataque</li>
+                <li><span class="cap-dot green"></span>Log de eventos em tempo real</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ─── FOOTER ─── -->
+  <footer class="footer">
+    <div class="footer-brand mono">
+      <strong>DataSentinel</strong> <span class="fver">v2.0</span><br>
+      <span class="fcopy">© 2025 Cyber Defense System</span>
+    </div>
+    <div class="footer-terminal mono" id="termToggle" title="Clique para abrir o terminal">
+      <span class="ft-label">TERMINAL</span>
+      <span id="terminal-line-1">datasentinel@localhost:~$ <span class="ft-hint">clique para abrir</span></span>
+      <span class="blink" aria-hidden="true">█</span>
+    </div>
+    <div class="footer-right">
+      <div class="footer-stat">
+        <div class="fs-label mono">CONEXÕES ATIVAS</div>
+        <div class="fs-val mono" id="footer-conns">—</div>
+      </div>
+      <div class="footer-stat">
+        <div class="fs-label mono">UPTIME DO SISTEMA</div>
+        <div class="fs-val mono" id="uptime-display">0h 0m 0s</div>
+      </div>
+      <canvas id="ecgCanvas" class="ecg-canvas" height="32" width="180" aria-hidden="true"></canvas>
+    </div>
+  </footer>
 </div>
 
-<div class="map" id="threat-map" role="img" aria-label="Mapa de eventos">
-<!-- Mapa equiretangular WGS84 — mesmo modelo percentual do overlay SVG -->
-<div class="map-world-layer" aria-hidden="true">
-<img class="map-world-img" src="imagens/mapa.png" alt="Mapa do mundo" decoding="async" loading="lazy" width="2000" height="1000"/>
-</div>
-<div class="map-cinematic" aria-hidden="true"></div>
-<div class="map-depth"></div>
-<div class="map-grid map-grid-fine" aria-hidden="true"></div>
-<div class="map-grid" aria-hidden="true"></div>
-<div class="map-glow" aria-hidden="true"></div>
-<div class="radar" aria-hidden="true"></div>
-<svg class="attack-overlay" id="attackOverlay" viewBox="0 0 100 100" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"></svg>
-<div class="map-frame-corner tl"></div>
-<div class="map-frame-corner tr"></div>
-<div class="map-frame-corner bl"></div>
-<div class="map-frame-corner br"></div>
-<div class="map-hud-corner tl mono">WGS84 · SRC</div>
-<div class="map-hud-corner br mono">CORREL · DST</div>
-</div>
-
-<div class="map-footer">
-<div class="small-card">
-<h3>Conexões (amostra)</h3>
-<div class="small-graph">
-<canvas id="miniTrend"></canvas>
-</div>
-</div>
-<div class="small-card donut-card">
-<h3>Distribuição geográfica · SIEM</h3>
-<p class="donut-caption mono">Top países (sessão) · centro: ameaças / conexões ao vivo</p>
-<div class="donut-wrap">
-<div class="donut-center-stats mono">
-<div><strong id="donut-threats-center">—</strong><span>Ameaças</span></div>
-<div><strong id="donut-conn-center">—</strong><span>Conexões</span></div>
-</div>
-<canvas id="socDonut" aria-label="Gráfico de países correlacionados"></canvas>
-</div>
-</div>
-<div class="small-card countries-card">
-<h3>Top origens (sessão)</h3>
-<div class="country-list" id="country-list"></div>
-</div>
-</div>
+<!-- ─── TERMINAL OVERLAY ─── -->
+<div id="termOverlay" class="term-overlay">
+  <div class="term-topbar">
+    <div class="term-winbtns">
+      <span class="term-wbtn red"   id="termClose" title="Fechar">×</span>
+      <span class="term-wbtn yellow" id="termMin"  title="Minimizar">─</span>
+      <span class="term-wbtn green"  id="termMax"  title="Maximizar">□</span>
+    </div>
+    <span class="mono term-title-text">DataSentinel Terminal · bash · v2.0</span>
+    <div class="term-tab-active mono">LOGS EM TEMPO REAL</div>
+  </div>
+  <div class="term-body" id="termBody"></div>
+  <div class="term-inputrow">
+    <span class="mono term-ps">datasentinel@localhost:~$&nbsp;</span>
+    <input type="text" id="termInput" class="term-input mono"
+           autocomplete="off" spellcheck="false"
+           placeholder="digite um comando… (help para ver todos)" />
+  </div>
 </div>
 
-<div class="box alert-panel">
-<div class="box-header">
-<h2>Alertas em tempo real</h2>
-<span class="status-badge live">socket</span>
-</div>
-<div class="alert-feed" id="alerts-feed"></div>
-<button type="button" class="button-link" id="btn-clear-alerts">Limpar painel (local)</button>
-</div>
-
-<div class="box top-ips-panel">
-<div class="box-header">
-<h2>Top IPs correlacionados</h2>
-<span class="tag mono" id="ips-tag">frequência</span>
-</div>
-<div class="ips-list" id="ips-list"></div>
-</div>
-</section>
-
-<section class="network">
-<div class="box">
-<div class="box-header">
-<h2>Tráfego monitorado (host)</h2>
-<span class="tag mono">psutil</span>
-</div>
-<div class="graph">
-<canvas id="networkChart"></canvas>
-</div>
+<!-- Legacy JS shims -->
+<div style="display:none" aria-hidden="true">
+  <div id="country-list"></div>
+  <div id="donut-threats-center"></div>
+  <div id="donut-conn-center"></div>
+  <span id="metric-countries">0</span>
+  <span id="trend-countries"><span class="trend-val">—</span></span>
+  <span id="trend-connections"><span class="trend-val">—</span></span>
+  <span id="trend-threats"><span class="trend-val">—</span></span>
+  <span id="trend-unique"><span class="trend-val">—</span></span>
+  <div id="spark-connections"></div><div id="spark-threats"></div>
+  <div id="spark-sources"></div><div id="spark-countries"></div>
+  <div id="telemetry-stream"></div>
+  <span id="terminal-line-2"></span><span id="terminal-line-3"></span>
+  <div id="summary-grid"></div>
+  <span id="sum-threats"></span><span id="sum-last-ts"></span>
+  <span id="sum-socket"></span><span id="sum-api"></span>
+  <div id="logs-updated"></div>
+  <span id="ips-tag"></span><span id="session-line"></span>
+  <span id="subtitle-main"></span>
+  <span id="readout-net"></span><div id="bar-net" style="width:0%"></div>
 </div>
 
-<div class="box logs-panel">
-<div class="box-header">
-<h2>Logs recentes</h2>
-<span class="tag mono" id="logs-updated">ataques.log</span>
-</div>
-<div class="logs mono" id="logs-container"></div>
-<div class="info-grid" id="summary-grid"></div>
-</div>
-</section>
-
-<section class="summary-grid secondary-grid">
-<div class="box commands-panel">
-<h2>Stream de telemetria</h2>
-<div class="terminal-commands mono" id="telemetry-stream"></div>
-</div>
-<div class="box system-summary-panel">
-<h2>Síntese operacional</h2>
-<div class="summary-list" id="operational-summary">
-<div><span>Ameaças totais (host)</span><strong class="mono" id="sum-threats">—</strong></div>
-<div><span>Último evento</span><strong class="mono" id="sum-last-ts">—</strong></div>
-<div><span>Socket</span><strong class="mono" id="sum-socket">—</strong></div>
-<div><span>API métricas</span><strong class="mono" id="sum-api">—</strong></div>
-</div>
-</div>
-</section>
-
-<div class="terminal">
-<p class="mono" id="terminal-line-1">root@datasentinel:~ # aguardando eventos…</p>
-<p class="mono" id="terminal-line-2"></p>
-<p class="mono" id="terminal-line-3"></p>
-<span class="blink" aria-hidden="true">█</span>
-</div>
-</main>
-</div>
-
-<script src="/socket.io/socket.io.js"></script>
+<script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
 <script src="script.js"></script>
 </body>
 </html>

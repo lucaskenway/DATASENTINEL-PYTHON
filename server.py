@@ -29,27 +29,25 @@ def _defender_coords():
         return -23.55, -46.63
 
 
-def _net_activity_percent():
+def _net_stats():
     global _last_net, _last_net_t
     now = time.time()
     try:
         ctr = psutil.net_io_counters()
     except Exception:
-        return 0.0
+        return 0.0, 0.0, 0.0
 
-    pct = 0.0
+    pct, tx, rx = 0.0, 0.0, 0.0
     if _last_net is not None and _last_net_t is not None:
         dt = now - _last_net_t
         if dt > 0:
-            delta = (ctr.bytes_sent + ctr.bytes_recv) - (
-                _last_net.bytes_sent + _last_net.bytes_recv
-            )
-            mb_s = (delta / dt) / (1024 * 1024)
-            pct = min(100.0, mb_s * 25.0)
+            tx = round((ctr.bytes_sent - _last_net.bytes_sent) / dt / (1024 * 1024), 2)
+            rx = round((ctr.bytes_recv - _last_net.bytes_recv) / dt / (1024 * 1024), 2)
+            pct = min(100.0, (tx + rx) * 25.0)
 
     _last_net = ctr
     _last_net_t = now
-    return pct
+    return pct, tx, rx
 
 
 @app.route("/")
@@ -65,6 +63,12 @@ def script():
 @app.route("/style.css")
 def style():
     return send_from_directory("templates", "style.css")
+
+
+@app.route("/imagens/<path:filename>")
+def image(filename):
+    image_dir = os.path.join(app.root_path, "templates", "imagens")
+    return send_from_directory(image_dir, filename)
 
 
 @app.route("/api/metrics")
@@ -86,13 +90,21 @@ def api_metrics():
         cpu = 0.0
         mem = 0.0
 
-    net_pct = _net_activity_percent()
+    try:
+        disk = psutil.disk_usage("/").percent
+    except Exception:
+        disk = 0.0
+
+    net_pct, net_tx, net_rx = _net_stats()
 
     return jsonify(
         {
             "cpu": round(cpu, 1),
             "memory": round(mem, 1),
+            "disk": round(disk, 1),
             "network_activity": round(net_pct, 1),
+            "net_tx_mbps": net_tx,
+            "net_rx_mbps": net_rx,
             "connections_active": established,
             "threats_total": _state["threats_total"],
             "defender": {"lat": defender_lat, "lon": defender_lon},
