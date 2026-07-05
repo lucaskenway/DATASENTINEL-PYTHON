@@ -112,8 +112,8 @@ function addLeafletMarker(lat, lon, meta) {
   }).addTo(leafletMap);
 
   if (meta.ip) {
-    const loc = meta.location ? ` · ${meta.location}` : '';
-    dot.bindTooltip(`${meta.ip}${loc}`, { permanent: false, className: 'leaflet-dark-tooltip' });
+    const loc = meta.location ? ` · ${escHtml(meta.location)}` : '';
+    dot.bindTooltip(`${escHtml(meta.ip)}${loc}`, { permanent: false, className: 'leaflet-dark-tooltip' });
   }
 
   /* Expanding ring animation */
@@ -221,6 +221,17 @@ function bindNavigation() {
     showSection('logs');
   });
   document.getElementById('btn-refresh-logs')?.addEventListener('click', fetchAndRenderFullLogs);
+
+  document.getElementById('btnLogout')?.addEventListener('click', () => {
+    const logoutForm = document.getElementById('logout-form');
+    if (logoutForm) {
+      logoutForm.submit();
+    } else {
+      fetch('/logout', { method: 'POST', headers: { 'X-CSRF-Token': csrfToken() } })
+        .catch(() => {})
+        .finally(() => { window.location.href = '/login'; });
+    }
+  });
 
   const logSearch = document.getElementById('log-search');
   logSearch?.addEventListener('input', () => filterFullLogs(logSearch.value));
@@ -346,8 +357,8 @@ function prependAlertCard(payload) {
     row.innerHTML = `
       <span class="row-time">${time}</span>
       <span><span class="badge ${badgeClass(type)}">${type}</span></span>
-      <span class="row-desc">${desc}</span>
-      <span class="row-ip">${ip}</span>
+      <span class="row-desc">${escHtml(desc)}</span>
+      <span class="row-ip">${escHtml(ip)}</span>
       <span class="row-flag">${flag}</span>
     `;
     return row;
@@ -383,8 +394,8 @@ function renderTopIps() {
     const item = document.createElement('div');
     item.className = 'ip-item';
     item.innerHTML = `
-      ${flagSrc ? `<img class="ip-flag" src="${flagSrc}" alt="${country}" loading="lazy">` : `<span style="font-size:14px">🌐</span>`}
-      <span class="ip-addr">${ip}</span>
+      ${flagSrc ? `<img class="ip-flag" src="${flagSrc}" alt="${escHtml(country)}" loading="lazy">` : `<span style="font-size:14px">🌐</span>`}
+      <span class="ip-addr">${escHtml(ip)}</span>
       <div class="ip-bar-wrap"><div class="ip-bar-inner" style="width:${Math.round(count/maxHits*100)}%"></div></div>
       <span class="ip-count">${count}x</span>
     `;
@@ -587,6 +598,7 @@ async function pollMetrics() {
   try {
     const t0 = Date.now();
     const res = await fetch('/api/metrics');
+    if (res.status === 401) { window.location.href = '/login'; return; }
     const d   = await res.json();
     const latency = Date.now() - t0;
 
@@ -663,6 +675,7 @@ function setText(id, val) { const el = document.getElementById(id); if (el) el.t
 async function pollLogs() {
   try {
     const res = await fetch('/api/logs?n=200');
+    if (res.status === 401) { window.location.href = '/login'; return; }
     const d   = await res.json();
     const lines = d.lines || [];
     state.allLogLines = lines;
@@ -682,7 +695,7 @@ function renderRecentLogs(lines) {
     const { time, text, tag, tagClass } = parseLogLine(line);
     row.innerHTML = `
       <span class="log-time">${time}</span>
-      <span class="log-desc">${text}</span>
+      <span class="log-desc">${escHtml(text)}</span>
       <span class="log-tag ${tagClass}">${tag}</span>
     `;
     el.appendChild(row);
@@ -703,15 +716,26 @@ function parseLogLine(line) {
 function renderFullLogs(lines) {
   const el = document.getElementById('logs-full-container');
   if (!el) return;
+  const countEl = document.getElementById('log-count');
+
+  if (!lines.length) {
+    el.innerHTML = '<div class="empty-state">Nenhum log encontrado.</div>';
+    if (countEl) countEl.textContent = '0 linhas';
+    return;
+  }
+
   el.innerHTML = '';
   lines.slice().reverse().forEach(line => {
     const div = document.createElement('div');
-    div.className = 'full-log-line mono';
-    const { time, tagClass } = parseLogLine(line);
-    div.innerHTML = `<span class="fl-time">${time}</span><span class="fl-text ${tagClass.replace('log-tag-','fl-')}">${escHtml(line)}</span>`;
+    const { time, tag, tagClass } = parseLogLine(line);
+    div.className = `full-log-line mono fl-${tagClass.replace('log-tag-','')}`;
+    div.innerHTML = `
+      <span class="fl-time">${time}</span>
+      <span class="log-tag ${tagClass}">${tag}</span>
+      <span class="fl-text">${escHtml(line)}</span>
+    `;
     el.appendChild(div);
   });
-  const countEl = document.getElementById('log-count');
   if (countEl) countEl.textContent = `${lines.length} linhas`;
 }
 
@@ -733,7 +757,13 @@ function refreshLogsPage() {
 }
 
 function escHtml(s) {
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function csrfToken() {
+  return document.querySelector('meta[name="csrf-token"]')?.content || '';
 }
 
 /* ────────────────── ATAQUES PAGE ────────────────── */
@@ -779,7 +809,7 @@ function refreshFirewallPage() {
     const time = new Date().toLocaleTimeString('pt-BR');
     return `<div class="fw-ip-row">
       <span style="font-size:14px">${flag}</span>
-      <span class="fw-ip-addr">${ip}</span>
+      <span class="fw-ip-addr">${escHtml(ip)}</span>
       <span class="fw-ip-count">${count}x</span>
       <span class="fw-ip-time">${time}</span>
     </div>`;
@@ -802,6 +832,11 @@ function bindSocket() {
     setText('socket-status', 'OFFLINE');
     const statusEl = document.querySelector('#socket-status');
     if (statusEl) statusEl.className = 'tstat-value danger';
+    setText('cfg-socket-status', 'DESCONECTADO');
+  });
+
+  socket.on('connect_error', () => {
+    /* Conexao recusada tipicamente por sessao expirada/nao autenticada */
     setText('cfg-socket-status', 'DESCONECTADO');
   });
 
@@ -1067,10 +1102,11 @@ function termExec(raw) {
 
     case 'test': {
       const ip = args[0] || '';
-      const url = ip ? `/test_alert/${ip}` : '/test_alert';
-      fetch(url).then(r=>r.json()).then(d => {
-        termPrint(`Alerta disparado: ${d.payload?.ip} · ${d.payload?.type}`, 't-ok');
-      }).catch(() => termPrint('Erro ao disparar alerta.', 't-err'));
+      const url = ip ? `/test_alert/${encodeURIComponent(ip)}` : '/test_alert';
+      fetch(url, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken() } })
+        .then(r => { if (r.status === 401) { window.location.href = '/login'; return null; } return r.json(); })
+        .then(d => { if (d) termPrint(`Alerta disparado: ${d.payload?.ip} · ${d.payload?.type}`, 't-ok'); })
+        .catch(() => termPrint('Erro ao disparar alerta.', 't-err'));
       break;
     }
 
