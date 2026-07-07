@@ -6,6 +6,7 @@ const CHART_POINTS    = 40;
 const MAX_ATTACK_ROWS = 50;
 const POLL_INTERVAL   = 2500;
 const LOG_INTERVAL    = 5000;
+const MARKER_LIFETIME_MS = 5 * 60 * 1000; /* tempo que o marcador de ataque fica no mapa */
 
 const DEFENDER_DEFAULT = { lat: -23.55, lon: -46.63 };
 
@@ -137,7 +138,26 @@ function addLeafletMarker(lat, lon, meta) {
   /* Auto-remove dot */
   setTimeout(() => {
     if (leafletMap && leafletMap.hasLayer(dot)) leafletMap.removeLayer(dot);
-  }, 14000);
+  }, MARKER_LIFETIME_MS);
+}
+
+/* Redesenha no mapa um alerta que ja tinha expirado (marcador removido apos MARKER_LIFETIME_MS) */
+function reshowAlertOnMap(payload) {
+  const lat = payload.lat, lon = payload.lon;
+  if (lat == null || lon == null) return;
+
+  showSection('dash');
+
+  setTimeout(() => {
+    const defLat = state.defender.lat, defLon = state.defender.lon;
+    const sev = 'high';
+    addLeafletMarker(lat, lon, { ip: payload.ip, location: payload.location, severity: sev });
+    addLeafletLine(lat, lon, defLat, defLon, sev);
+    focusMapOn(lat, lon, 4000);
+    const type = attackTypeFromPayload(payload);
+    const label = `${payload.location || payload.country || 'Desconhecido'} · ${type}`;
+    showMapLabel(label, 5000);
+  }, 120);
 }
 
 function addLeafletLine(fromLat, fromLon, toLat, toLon, severity) {
@@ -357,10 +377,13 @@ function prependAlertCard(payload) {
     row.innerHTML = `
       <span class="row-time">${time}</span>
       <span><span class="badge ${badgeClass(type)}">${type}</span></span>
-      <span class="row-desc">${escHtml(desc)}</span>
+      <span class="row-desc" title="Clique para mostrar novamente no mapa">${escHtml(desc)}</span>
       <span class="row-ip">${escHtml(ip)}</span>
       <span class="row-flag">${flag}</span>
     `;
+    if (payload.lat != null && payload.lon != null) {
+      row.querySelector('.row-desc').addEventListener('click', () => reshowAlertOnMap(payload));
+    }
     return row;
   }
 
@@ -880,7 +903,7 @@ function handleNewAlert(payload) {
   const lat = payload.lat, lon = payload.lon;
   if (lat != null && lon != null) {
     const defLat = state.defender.lat, defLon = state.defender.lon;
-    const sev = lat != null ? 'high' : 'medium';
+    const sev = 'high';
     addLeafletMarker(lat, lon, { ip, location: payload.location, severity: sev });
     addLeafletLine(lat, lon, defLat, defLon, sev);
     focusMapOn(lat, lon, 4000);

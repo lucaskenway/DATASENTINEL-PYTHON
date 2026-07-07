@@ -374,7 +374,8 @@ body {
 .attack-row:hover { background: rgba(77,255,154,0.04); }
 @keyframes rowSlide { from{transform:translateX(-8px);opacity:0} to{transform:none;opacity:1} }
 .attack-row .row-time { color: var(--muted); font-size: 9px; }
-.attack-row .row-desc { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.attack-row .row-desc { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.attack-row .row-desc:hover { color: var(--neon2); text-decoration: underline; }
 .attack-row .row-ip   { color: var(--neon2); }
 .attack-row .row-flag { font-size: 14px; }
 
