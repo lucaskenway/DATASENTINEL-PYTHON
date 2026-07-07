@@ -308,6 +308,73 @@ página se for testar via `curl`).
 
 ---
 
+## Testes
+
+Os testes em `tests/` são de integração: eles não sobem o Flask sozinhos, então
+o servidor precisa estar rodando antes de executá-los.
+
+### 1. Instale as dependências de teste
+
+```bash
+pip install pytest python-socketio
+```
+
+### 2. Em um terminal, inicie o servidor
+
+Use as mesmas credenciais que os testes vão usar para logar (por padrão
+`admin` / `admin1234`, a menos que você defina outras no `.env`):
+
+```bash
+# Windows
+python server.py
+```
+
+```bash
+# Linux / macOS
+python3 server.py
+```
+
+### 3. Em outro terminal, rode os testes
+
+```bash
+pytest tests/
+```
+
+Se o servidor estiver em outra URL ou com credenciais diferentes das padrão,
+defina antes de rodar:
+
+```bash
+# Windows (cmd)
+set DATASENTINEL_URL=http://127.0.0.1:5000
+set DATASENTINEL_ADMIN_USER=admin
+set DATASENTINEL_ADMIN_PASSWORD=admin1234
+pytest tests/
+```
+
+```bash
+# Linux / macOS
+export DATASENTINEL_URL=http://127.0.0.1:5000
+export DATASENTINEL_ADMIN_USER=admin
+export DATASENTINEL_ADMIN_PASSWORD=admin1234
+pytest tests/
+```
+
+Há também `test_real_time.py` na raiz do projeto — não é um teste pytest, mas
+um script manual que dispara ataques simulados contra o dashboard, útil para
+testar visualmente o mapa e o feed em tempo real:
+
+```bash
+# Windows
+python test_real_time.py
+```
+
+```bash
+# Linux / macOS
+python3 test_real_time.py
+```
+
+---
+
 ## Estrutura do Projeto
 
 ```
