@@ -301,6 +301,19 @@ def _sanitize_alert(data):
     return clean
 
 
+def _append_alert_log(payload):
+    """Grava o alerta em ataques.log para que /api/logs (pagina de Logs e
+    terminal) reflita os eventos assim que a proxima leitura acontecer."""
+    ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(payload.get("timestamp") or time.time()))
+    message = payload.get("message") or f"{payload.get('type', 'desconhecido')} | IP {payload.get('ip', '-')}"
+    line = f"[{ts}] BLOCK | {message}"
+    try:
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except OSError:
+        pass
+
+
 # ---------------------------------------------------------------------------
 # Rotas
 # ---------------------------------------------------------------------------
@@ -432,6 +445,7 @@ def test_alert(ip=None):
     payload = _sanitize_alert(payload)
     _state["threats_total"] += 1
     payload["threats_total"] = _state["threats_total"]
+    _append_alert_log(payload)
     socketio.emit("new_alert", payload)
     return jsonify(success=True, payload=payload)
 
@@ -456,6 +470,7 @@ def ingest_alert():
     clean = _sanitize_alert(data)
     _state["threats_total"] += 1
     clean["threats_total"] = _state["threats_total"]
+    _append_alert_log(clean)
     socketio.emit("new_alert", clean)
     return jsonify(success=True)
 
