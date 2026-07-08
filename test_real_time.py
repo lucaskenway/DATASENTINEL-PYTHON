@@ -1,55 +1,44 @@
 import argparse
+import os
 import random
 import sys
 import threading
 import time
 
-import socketio
+import requests
+from dotenv import load_dotenv
 
-SERVER_URL = "http://127.0.0.1:5000"
+load_dotenv()
 
+SERVER_URL = os.environ.get("DATASENTINEL_SERVER_URL", "http://127.0.0.1:5000")
+INGEST_TOKEN = os.environ.get("DATASENTINEL_INGEST_TOKEN")
+
+# Lista de cidades/paises usada para variar a origem dos alertas simulados.
 LOCATIONS = [
-    {
-        "country": "Estados Unidos",
-        "region": "California",
-        "city": "Mountain View",
-        "location": "Estados Unidos - Mountain View",
-        "lat": 37.386,
-        "lon": -122.0838,
-    },
-    {
-        "country": "Brasil",
-        "region": "São Paulo",
-        "city": "São Paulo",
-        "location": "Brasil - São Paulo",
-        "lat": -23.55,
-        "lon": -46.63,
-    },
-    {
-        "country": "Alemanha",
-        "region": "Baviera",
-        "city": "Munique",
-        "location": "Alemanha - Munique",
-        "lat": 48.1351,
-        "lon": 11.5820,
-    },
-    {
-        "country": "Japão",
-        "region": "Tóquio",
-        "city": "Tóquio",
-        "location": "Japão - Tóquio",
-        "lat": 35.6828,
-        "lon": 139.7595,
-    },
-    {
-        "country": "Canadá",
-        "region": "Ontário",
-        "city": "Toronto",
-        "location": "Canadá - Toronto",
-        "lat": 43.6532,
-        "lon": -79.3832,
-    },
+    {"country": "Estados Unidos", "region": "California", "city": "Mountain View", "lat": 37.386, "lon": -122.0838},
+    {"country": "Estados Unidos", "region": "Virginia", "city": "Ashburn", "lat": 39.0438, "lon": -77.4874},
+    {"country": "Brasil", "region": "São Paulo", "city": "São Paulo", "lat": -23.55, "lon": -46.63},
+    {"country": "Brasil", "region": "Rio de Janeiro", "city": "Rio de Janeiro", "lat": -22.9068, "lon": -43.1729},
+    {"country": "Alemanha", "region": "Baviera", "city": "Munique", "lat": 48.1351, "lon": 11.5820},
+    {"country": "Alemanha", "region": "Hesse", "city": "Frankfurt", "lat": 50.1109, "lon": 8.6821},
+    {"country": "Japão", "region": "Tóquio", "city": "Tóquio", "lat": 35.6828, "lon": 139.7595},
+    {"country": "Canadá", "region": "Ontário", "city": "Toronto", "lat": 43.6532, "lon": -79.3832},
+    {"country": "Rússia", "region": "Moscou", "city": "Moscou", "lat": 55.7558, "lon": 37.6173},
+    {"country": "China", "region": "Xangai", "city": "Xangai", "lat": 31.2304, "lon": 121.4737},
+    {"country": "Índia", "region": "Maharashtra", "city": "Mumbai", "lat": 19.0760, "lon": 72.8777},
+    {"country": "França", "region": "Île-de-France", "city": "Paris", "lat": 48.8566, "lon": 2.3522},
+    {"country": "Reino Unido", "region": "Inglaterra", "city": "Londres", "lat": 51.5074, "lon": -0.1278},
+    {"country": "Holanda", "region": "Holanda do Norte", "city": "Amsterdã", "lat": 52.3676, "lon": 4.9041},
+    {"country": "Austrália", "region": "Nova Gales do Sul", "city": "Sydney", "lat": -33.8688, "lon": 151.2093},
+    {"country": "Coreia do Sul", "region": "Seul", "city": "Seul", "lat": 37.5665, "lon": 126.9780},
+    {"country": "México", "region": "Cidade do México", "city": "Cidade do México", "lat": 19.4326, "lon": -99.1332},
+    {"country": "África do Sul", "region": "Gauteng", "city": "Joanesburgo", "lat": -26.2041, "lon": 28.0473},
+    {"country": "Argentina", "region": "Buenos Aires", "city": "Buenos Aires", "lat": -34.6037, "lon": -58.3816},
+    {"country": "Ucrânia", "region": "Kiev", "city": "Kiev", "lat": 50.4501, "lon": 30.5234},
 ]
+
+for _loc in LOCATIONS:
+    _loc["location"] = f"{_loc['country']} - {_loc['city']}"
 
 SEVERITY_MAP = {
     "high": {"type": "port_scan", "reason": "threshold"},
@@ -81,26 +70,35 @@ def build_payload(severity):
     }
 
 
-def emit_alert(client, severity):
+def send_alert(session, severity):
     payload = build_payload(severity)
-    client.emit("new_alert", payload)
-    print(f"[emit] {severity.upper()} -> {payload['ip']} @ {payload['location']}")
+    try:
+        resp = session.post(
+            f"{SERVER_URL}/api/ingest_alert",
+            json=payload,
+            headers={"Authorization": f"Bearer {INGEST_TOKEN}"},
+            timeout=4,
+        )
+        status = "OK" if resp.ok else f"HTTP {resp.status_code}"
+    except requests.RequestException as exc:
+        status = f"ERRO ({exc})"
+    print(f"[{status}] {severity.upper()} -> {payload['ip']} @ {payload['location']}")
 
 
-def sequential_mode(client):
+def sequential_mode(session):
     print("Modo sequencial: enviando 6 ataques com intervalos crescentes...")
     for i, sev in enumerate(["low", "medium", "high", "medium", "high", "low"]):
-        emit_alert(client, sev)
+        send_alert(session, sev)
         time.sleep(2 + i * 0.5)
     print("Modo sequencial finalizado.")
 
 
-def parallel_mode(client):
+def parallel_mode(session):
     print("Modo paralelo: gerando 3 fluxos de ataque simultâneos...")
     threads = []
-    for idx in range(3):
+    for _ in range(3):
         thread = threading.Thread(
-            target=lambda: [emit_alert(client, random.choice(["low", "medium", "high"])) or time.sleep(random.uniform(0.8, 1.6)) for _ in range(6)],
+            target=lambda: [send_alert(session, random.choice(["low", "medium", "high"])) or time.sleep(random.uniform(0.8, 1.6)) for _ in range(6)],
             daemon=True,
         )
         thread.start()
@@ -110,13 +108,16 @@ def parallel_mode(client):
     print("Modo paralelo finalizado.")
 
 
-def continuous_mode(client):
-    print("Modo contínuo: enviando alertas enquanto não interrompido (CTRL+C)...")
+def continuous_mode(session, interval):
+    print(
+        f"Modo contínuo: enviando alertas a cada ~{interval:.0f}s "
+        "enquanto não interrompido (CTRL+C)..."
+    )
     try:
         while True:
             severity = random.choices(["high", "medium", "low"], [0.35, 0.35, 0.3])[0]
-            emit_alert(client, severity)
-            time.sleep(random.uniform(1.4, 2.7))
+            send_alert(session, severity)
+            time.sleep(random.uniform(interval * 0.8, interval * 1.2))
     except KeyboardInterrupt:
         print("Interrompido pelo usuário.")
 
@@ -129,6 +130,18 @@ def parse_args():
         "--mode",
         choices=["1", "2", "3", "sequential", "parallel", "continuous"],
         help="Modo de teste: 1/sequential, 2/parallel, 3/continuous",
+    )
+    parser.add_argument(
+        "--token",
+        help="Token de ingestao (equivale a DATASENTINEL_INGEST_TOKEN). "
+        "Sobrepoe a variavel de ambiente, se informado.",
+    )
+    parser.add_argument(
+        "--interval",
+        type=float,
+        default=8.0,
+        help="Intervalo medio em segundos entre alertas no modo continuo "
+        "(padrao: 8s, com variacao de +/-20%%).",
     )
     return parser.parse_args()
 
@@ -147,18 +160,24 @@ def normalize_mode(choice):
 
 
 def main():
+    global INGEST_TOKEN
     args = parse_args()
-    print("DataSentinel Real-Time Alert Simulator")
-    print(f"Conectando em {SERVER_URL}")
-    client = socketio.Client(logger=False, reconnection=True)
+    if args.token:
+        INGEST_TOKEN = args.token
 
-    try:
-        client.connect(SERVER_URL, transports=["websocket", "polling"])
-    except Exception as exc:
-        print(f"Erro ao conectar ao servidor: {exc}")
+    print("DataSentinel Real-Time Alert Simulator")
+    print(f"Servidor: {SERVER_URL}")
+
+    if not INGEST_TOKEN:
+        print(
+            "Erro: DATASENTINEL_INGEST_TOKEN nao definida.\n"
+            "Use a mesma variavel de ambiente configurada no server.py "
+            "(ela e impressa no console dele ao iniciar, se nao tiver sido "
+            "definida manualmente) ou passe --token <valor>."
+        )
         sys.exit(1)
 
-    print("Conexão estabelecida.")
+    session = requests.Session()
     selected_mode = normalize_mode(args.mode)
 
     if selected_mode is None and sys.stdin.isatty():
@@ -177,16 +196,15 @@ def main():
         selected_mode = "1"
 
     if selected_mode == "1":
-        sequential_mode(client)
+        sequential_mode(session)
     elif selected_mode == "2":
-        parallel_mode(client)
+        parallel_mode(session)
     elif selected_mode == "3":
-        continuous_mode(client)
+        continuous_mode(session, args.interval)
     else:
         print("Modo inválido. Enviando um único alerta de teste.")
-        emit_alert(client, "low")
+        send_alert(session, "low")
 
-    client.disconnect()
     print("Simulação encerrada.")
 
 
