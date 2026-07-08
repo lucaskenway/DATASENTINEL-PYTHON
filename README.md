@@ -361,17 +361,26 @@ pytest tests/
 
 Há também `test_real_time.py` na raiz do projeto — não é um teste pytest, mas
 um script manual que dispara ataques simulados contra o dashboard, útil para
-testar visualmente o mapa e o feed em tempo real:
+testar visualmente o mapa e o feed em tempo real. Ele envia os alertas via
+`POST /api/ingest_alert` (o mesmo endpoint que `monitor.py` usa), então
+precisa do `DATASENTINEL_INGEST_TOKEN` configurado no `.env` (ou passado via
+`--token`) — não requer login no navegador, já que é uma integração
+servico-a-servico:
 
 ```bash
 # Windows
-python test_real_time.py
+python test_real_time.py --mode 3
 ```
 
 ```bash
 # Linux / macOS
-python3 test_real_time.py
+python3 test_real_time.py --mode 3
 ```
+
+Modos disponíveis via `--mode`: `1`/`sequential` (6 ataques com intervalos
+crescentes), `2`/`parallel` (3 fluxos simultâneos) e `3`/`continuous` (envia
+alertas indefinidamente até `CTRL+C`, um a cada `--interval` segundos em
+média — padrão 8s). Sem `--mode`, o script pergunta interativamente.
 
 ---
 
