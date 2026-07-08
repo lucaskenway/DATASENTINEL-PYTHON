@@ -3,7 +3,7 @@
 <div align="center">
 
 ![Python](https://img.shields.io/badge/Python-3.8%2B-3776ab?style=for-the-badge&logo=python&logoColor=white)
-![Flask](https://img.shields.io/badge/Flask-2.x-000000?style=for-the-badge&logo=flask&logoColor=white)
+![Flask](https://img.shields.io/badge/Flask-3.x-000000?style=for-the-badge&logo=flask&logoColor=white)
 ![Socket.IO](https://img.shields.io/badge/Socket.IO-4.x-010101?style=for-the-badge&logo=socket.io&logoColor=white)
 ![Leaflet](https://img.shields.io/badge/Leaflet.js-1.9-199900?style=for-the-badge&logo=leaflet&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-4dff9a?style=for-the-badge)
@@ -205,41 +205,13 @@ $ clear         # Limpa o terminal
 
 | Camada | Tecnologia |
 |--------|-----------|
-| Backend | Python 3.8+, Flask 2.x |
+| Backend | Python 3.8+, Flask 3.x |
 | Tempo real | Flask-SocketIO, Socket.IO 4.x |
 | Metricas OS | psutil |
 | Frontend | HTML5, CSS3, JavaScript ES2020 |
 | Mapas | Leaflet.js 1.9.4 + OpenStreetMap |
 | Graficos | Chart.js 4.x |
 | Fontes | Oxanium, Fira Code, JetBrains Mono |
-
----
-
-## Instalacao
-
-### Pre-requisitos
-- Python 3.8 ou superior
-- pip
-
-### Passos
-
-```bash
-# Clone o repositorio
-git clone https://github.com/seu-usuario/DATASENTINEL-PYTHON.git
-cd DATASENTINEL-PYTHON
-
-# Crie e ative o ambiente virtual
-python -m venv venv
-
-# Windows
-venv\Scripts\activate
-
-# Linux / macOS
-source venv/bin/activate
-
-# Instale as dependencias
-pip install -r requirements.txt
-```
 
 ---
 
@@ -271,18 +243,38 @@ DATASENTINEL_INGEST_TOKEN=gere-com-secrets.token_urlsafe-24
 # Rede (opcional)
 DATASENTINEL_HOST=127.0.0.1        # 0.0.0.0 expõe a outras maquinas na rede — use com cuidado
 DATASENTINEL_PORT=5000
+DATASENTINEL_SERVER_URL=http://127.0.0.1:5000  # usado por monitor.py e test_real_time.py para achar o servidor
 DATASENTINEL_ALLOWED_ORIGINS=       # lista separada por virgula; vazio = so same-origin
 DATASENTINEL_DEF_LAT=-23.55         # Latitude do servidor defensor
 DATASENTINEL_DEF_LON=-46.63         # Longitude do servidor defensor
+
+# E-mail (opcional — usado por monitor.py para notificar ataques reais)
+EMAIL_HOST=smtp.example.com
+EMAIL_PORT=587
+EMAIL_USER=
+EMAIL_PASS=
+EMAIL_FROM=
+EMAIL_TO=
 ```
 
 ### Alimentando com ataques reais
 
-`monitor.py` lê as conexões ativas do sistema, detecta padrões suspeitos e envia os
-alertas para o dashboard via `POST /api/ingest_alert`, autenticado com
-`DATASENTINEL_INGEST_TOKEN` (a mesma variável precisa estar definida nos dois
-processos). Para integrar outra ferramenta (fail2ban, snort, etc.), envie um POST
-nesse formato:
+`monitor.py` lê as conexões ativas do sistema, detecta padrões suspeitos (por
+limiar de conexões e por um modelo de anomalia via `ai_detector.py`) e, quando
+encontra algo, faz três coisas ao mesmo tempo:
+
+- **bloqueia o IP no firewall do sistema operacional** (`netsh advfirewall` no
+  Windows, `iptables`/`ufw` no Linux) via `firewall.py` — isso altera regras
+  reais de firewall na máquina onde `monitor.py` roda, então só execute-o em
+  ambiente controlado/de teste;
+- grava o evento em `ataques.log` (`logger.py`) e envia um e-mail de alerta se
+  `EMAIL_USER`/`EMAIL_PASS`/`EMAIL_TO` estiverem configurados (`email_alert.py`);
+- envia o alerta para o dashboard via `POST /api/ingest_alert`, autenticado com
+  `DATASENTINEL_INGEST_TOKEN` (a mesma variável precisa estar definida nos dois
+  processos).
+
+Para integrar outra ferramenta (fail2ban, snort, etc.) diretamente com o
+dashboard, sem passar pelo `monitor.py`, envie um POST nesse formato:
 
 ```python
 import requests
@@ -390,9 +382,16 @@ média — padrão 8s). Sem `--mode`, o script pergunta interativamente.
 DATASENTINEL-PYTHON/
 ├── server.py              # Backend Flask + Socket.IO + API + autenticacao
 ├── monitor.py             # Coleta de conexoes, deteccao e envio de alertas
+├── detector.py            # Deteccao por limiar de conexoes/tempo
+├── ai_detector.py         # Deteccao de anomalia (IsolationForest / scikit-learn)
+├── firewall.py            # Bloqueio de IP no firewall do SO (netsh/iptables/ufw)
+├── logger.py              # Grava eventos em ataques.log
+├── email_alert.py         # Envio de e-mail de alerta via SMTP
+├── test_real_time.py      # Script manual de simulacao de ataques
 ├── requirements.txt       # Dependencias Python (versoes fixadas)
 ├── .env.example           # Modelo de variaveis de ambiente
 ├── ataques.log            # Log de ataques (lido em tempo real)
+├── tests/                 # Testes de integracao (pytest)
 └── templates/
     ├── index.html         # Estrutura HTML do dashboard
     ├── login.html         # Pagina de login (standalone, sem JS externo)
