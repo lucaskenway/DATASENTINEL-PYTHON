@@ -248,13 +248,17 @@ DATASENTINEL_ALLOWED_ORIGINS=       # lista separada por virgula; vazio = so sam
 DATASENTINEL_DEF_LAT=-23.55         # Latitude do servidor defensor
 DATASENTINEL_DEF_LON=-46.63         # Longitude do servidor defensor
 
-# E-mail (opcional — usado por monitor.py para notificar ataques reais)
+# E-mail (opcional — usado por monitor.py e web_log_monitor.py para notificar ataques reais)
 EMAIL_HOST=smtp.example.com
 EMAIL_PORT=587
 EMAIL_USER=
 EMAIL_PASS=
 EMAIL_FROM=
 EMAIL_TO=
+
+# Monitor de access log (opcional — usado por web_log_monitor.py)
+DATASENTINEL_WEB_LOG_PATH=           # caminho do access log (Apache/nginx, formato combined)
+DATASENTINEL_WEB_LOG_POLL=2          # intervalo em segundos entre leituras do arquivo
 ```
 
 ### Alimentando com ataques reais
@@ -273,8 +277,27 @@ encontra algo, faz três coisas ao mesmo tempo:
   `DATASENTINEL_INGEST_TOKEN` (a mesma variável precisa estar definida nos dois
   processos).
 
+`web_log_monitor.py` é um segundo processo opcional, independente do
+`monitor.py`: ele faz *tail* de um access log Apache/nginx (formato
+`combined`) e classifica requisições com assinaturas conhecidas de SQL
+Injection (`UNION SELECT`, `OR 1=1`, `sleep()`, etc.) ou XSS (`<script>`,
+`onerror=`, `javascript:`, etc.) no path/query string decodificado. Ao
+encontrar uma, faz o mesmo trio de ações do `monitor.py` (bloqueia IP,
+grava log/e-mail, envia para o dashboard com `type: "sql_injection"` ou
+`type: "xss"`). Configure `DATASENTINEL_WEB_LOG_PATH` com o caminho do log e
+rode:
+
+```bash
+python web_log_monitor.py
+```
+
+Ele só entende metadados de requisição (path/query da linha de log) — não
+inspeciona corpo de POST, então SQLi/XSS enviados via body de formulário/JSON
+não aparecem no access log padrão e não são detectados por esse script.
+
 Para integrar outra ferramenta (fail2ban, snort, etc.) diretamente com o
-dashboard, sem passar pelo `monitor.py`, envie um POST nesse formato:
+dashboard, sem passar pelo `monitor.py`/`web_log_monitor.py`, envie um POST
+nesse formato:
 
 ```python
 import requests
@@ -382,8 +405,10 @@ média — padrão 8s). Sem `--mode`, o script pergunta interativamente.
 DATASENTINEL-PYTHON/
 ├── server.py              # Backend Flask + Socket.IO + API + autenticacao
 ├── monitor.py             # Coleta de conexoes, deteccao e envio de alertas
-├── detector.py            # Deteccao por limiar de conexoes/tempo
-├── ai_detector.py         # Deteccao de anomalia (IsolationForest / scikit-learn)
+├── web_log_monitor.py     # Tail de access log (Apache/nginx) p/ SQLi/XSS
+├── alerting.py            # Geolocalizacao de IP e envio de alerta ao dashboard (compartilhado)
+├── detector.py            # Deteccao por limiar de conexoes/portas + classificacao do tipo
+├── ai_detector.py         # Deteccao de anomalia (IsolationForest treinado com dados reais)
 ├── firewall.py            # Bloqueio de IP no firewall do SO (netsh/iptables/ufw)
 ├── logger.py              # Grava eventos em ataques.log
 ├── email_alert.py         # Envio de e-mail de alerta via SMTP

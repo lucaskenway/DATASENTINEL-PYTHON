@@ -19,30 +19,36 @@ transferidos, duração da conexão) e considerar um dataset separado por
 ambiente/rede, já que hoje o "normal" aprendido é específico da máquina onde
 `monitor.py` roda.
 
-## Detecção por threshold é ingênua
+## ~~Detecção por threshold é ingênua~~ — parcialmente resolvido
 
-- **O quê**: além da contagem simples de conexões (`detector.py`), considerar:
-  janela deslizante configurável, contagem por porta de destino (para
-  distinguir brute force de port scan), e permitir ajuste do `THRESHOLD` via
-  config em vez de constante fixa (`detector.py:5`).
-- **Por quê**: `detect_suspicious` (`detector.py:7`) só olha "quantas conexões
-  desse IP nos últimos 10s", sem diferenciar tipo de ataque. O dashboard já
-  promete classificar em Brute Force / SQL Injection / Port Scan / XSS / DDoS
-  (README), mas o backend real (`monitor.py`) só gera o tipo genérico
-  `"intrusion"` — a classificação por tipo hoje só existe nos dados de teste
-  do frontend/`test_alert`.
-- **Esforço**: M
+`detector.py` agora rastreia janela deslizante de conexões (10s) e portas
+locais distintas (60s) por IP, e `classify_attack()` usa essas duas features
+para diferenciar `brute_force` (muitas conexões concentradas) de `port_scan`
+(muitas portas distintas). `monitor.py` usa esse tipo real no payload em vez
+do `"intrusion"` genérico anterior — junto com `web_log_monitor.py`
+(`sql_injection`/`xss`, ver item abaixo), cobre 4 dos 5 badges que o
+dashboard promete (falta só DDoS, que exigiria correlação entre múltiplos
+IPs, não só análise por IP individual).
+
+Ainda em aberto: tornar `THRESHOLD`/`PORT_SCAN_THRESHOLD` configuráveis via
+env var em vez de constantes fixas em `detector.py`.
 
 ## Sem ingestão de fontes reais de ataque
 
-- **O quê**: parsers dedicados para logs de `fail2ban`, `auth.log` (SSH),
-  Suricata/Snort (formato EVE JSON), Apache/nginx access log (para SQLi/XSS via
-  regex de payloads conhecidos).
+- **O quê** (parcialmente feito): `web_log_monitor.py` já faz *tail* de access
+  log Apache/nginx (formato `combined`) e classifica `sql_injection`/`xss`
+  via regex sobre o path/query decodificado — cobre a parte de SQLi/XSS.
+  Ainda faltam parsers dedicados para logs de `fail2ban`, `auth.log` (SSH) e
+  Suricata/Snort (formato EVE JSON).
 - **Por quê**: o README menciona integrar com "fail2ban, snort, etc." via
   redirecionamento para `ataques.log`, mas isso pressupõe que essas
-  ferramentas já escrevam no formato que o DataSentinel espera — não existe
-  hoje nenhum parser/adaptador de fato no código.
-- **Esforço**: L
+  ferramentas já escrevam no formato que o DataSentinel espera — ainda não
+  existe parser/adaptador para essas fontes especificamente (SSH/IDS).
+- **Limitação conhecida**: `web_log_monitor.py` só enxerga metadados de
+  requisição (path/query da linha de log); não inspeciona corpo de POST, então
+  SQLi/XSS via body de formulário/JSON não aparecem no access log padrão e
+  passam despercebidos.
+- **Esforço**: M/L (o que resta)
 
 ## Threat intelligence externa
 
