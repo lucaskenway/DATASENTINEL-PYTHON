@@ -13,6 +13,7 @@ from urllib.parse import unquote
 from alerting import LOCAL_IPS, get_geo, push_alert
 from email_alert import send_email
 from firewall import block_ip
+from log_tail import follow
 from logger import save_log
 
 WEB_LOG_PATH = os.environ.get("DATASENTINEL_WEB_LOG_PATH")
@@ -72,29 +73,10 @@ def classify_payload(path):
     return None
 
 
-def _open_at_end(path):
-    f = open(path, "r", encoding="utf-8", errors="ignore")
-    f.seek(0, os.SEEK_END)
-    return f
-
-
 def watch(path):
     print(f"[WEB-LOG] Monitorando {path} (formato combined) por SQLi/XSS...")
-    f = _open_at_end(path)
 
-    while True:
-        line = f.readline()
-        if not line:
-            time.sleep(POLL_INTERVAL)
-            try:
-                if os.path.getsize(path) < f.tell():
-                    # logrotate truncou/rotacionou o arquivo — reabre do zero
-                    f.close()
-                    f = _open_at_end(path)
-            except OSError:
-                pass
-            continue
-
+    for line in follow(path, POLL_INTERVAL):
         match = LOG_LINE_RE.match(line)
         if not match:
             continue

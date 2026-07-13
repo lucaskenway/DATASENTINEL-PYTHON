@@ -259,6 +259,13 @@ EMAIL_TO=
 # Monitor de access log (opcional — usado por web_log_monitor.py)
 DATASENTINEL_WEB_LOG_PATH=           # caminho do access log (Apache/nginx, formato combined)
 DATASENTINEL_WEB_LOG_POLL=2          # intervalo em segundos entre leituras do arquivo
+
+# Monitor de autenticacao SSH (opcional — usado por auth_log_monitor.py)
+DATASENTINEL_AUTH_LOG_PATH=          # caminho do auth.log/secure (mensagens de sshd)
+DATASENTINEL_FAIL2BAN_LOG_PATH=      # caminho do fail2ban.log
+DATASENTINEL_AUTH_LOG_POLL=2         # intervalo em segundos entre leituras dos arquivos
+DATASENTINEL_SSH_WINDOW=60           # janela (segundos) para contar falhas de login por IP
+DATASENTINEL_SSH_THRESHOLD=5         # falhas na janela para considerar forca bruta
 ```
 
 ### Alimentando com ataques reais
@@ -295,9 +302,27 @@ Ele só entende metadados de requisição (path/query da linha de log) — não
 inspeciona corpo de POST, então SQLi/XSS enviados via body de formulário/JSON
 não aparecem no access log padrão e não são detectados por esse script.
 
-Para integrar outra ferramenta (fail2ban, snort, etc.) diretamente com o
-dashboard, sem passar pelo `monitor.py`/`web_log_monitor.py`, envie um POST
-nesse formato:
+`auth_log_monitor.py` é um terceiro processo opcional, focado em força bruta
+de SSH, com duas fontes independentes (configure uma ou ambas):
+
+- **`DATASENTINEL_AUTH_LOG_PATH`** — acompanha o `auth.log`/`secure` (mensagens
+  de `sshd` via syslog), conta tentativas falhas (`Failed password`,
+  `Invalid user`) por IP numa janela deslizante (`DATASENTINEL_SSH_WINDOW`) e
+  alerta ao cruzar `DATASENTINEL_SSH_THRESHOLD`;
+- **`DATASENTINEL_FAIL2BAN_LOG_PATH`** — acompanha o `fail2ban.log`; como o
+  fail2ban já faz sua própria contagem, qualquer linha `Ban` é repassada
+  direto como alerta (`Unban` é ignorado).
+
+Em ambos os casos, o alerta segue o mesmo trio de ações dos outros monitores
+(bloqueia IP, grava log/e-mail, envia para o dashboard com
+`type: "brute_force"`):
+
+```bash
+python auth_log_monitor.py
+```
+
+Para integrar outra ferramenta (Suricata/Snort, etc.) diretamente com o
+dashboard, sem passar pelos monitores acima, envie um POST nesse formato:
 
 ```python
 import requests
@@ -406,7 +431,9 @@ DATASENTINEL-PYTHON/
 ├── server.py              # Backend Flask + Socket.IO + API + autenticacao
 ├── monitor.py             # Coleta de conexoes, deteccao e envio de alertas
 ├── web_log_monitor.py     # Tail de access log (Apache/nginx) p/ SQLi/XSS
+├── auth_log_monitor.py    # Tail de auth.log/fail2ban.log p/ forca bruta SSH
 ├── alerting.py            # Geolocalizacao de IP e envio de alerta ao dashboard (compartilhado)
+├── log_tail.py            # Tail de arquivo de log com suporte a rotacao (compartilhado)
 ├── detector.py            # Deteccao por limiar de conexoes/portas + classificacao do tipo
 ├── ai_detector.py         # Deteccao de anomalia (IsolationForest treinado com dados reais)
 ├── firewall.py            # Bloqueio de IP no firewall do SO (netsh/iptables/ufw)
