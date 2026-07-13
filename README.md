@@ -266,6 +266,11 @@ DATASENTINEL_FAIL2BAN_LOG_PATH=      # caminho do fail2ban.log
 DATASENTINEL_AUTH_LOG_POLL=2         # intervalo em segundos entre leituras dos arquivos
 DATASENTINEL_SSH_WINDOW=60           # janela (segundos) para contar falhas de login por IP
 DATASENTINEL_SSH_THRESHOLD=5         # falhas na janela para considerar forca bruta
+
+# Monitor de IDS/IPS (opcional — usado por ids_log_monitor.py)
+DATASENTINEL_EVE_LOG_PATH=           # caminho do eve.json (Suricata) ou log JSON compativel (Snort3)
+DATASENTINEL_EVE_LOG_POLL=2          # intervalo em segundos entre leituras do arquivo
+DATASENTINEL_EVE_MIN_SEVERITY=3      # piso de gravidade aceito (Suricata: 1=mais grave, numero maior=menos grave)
 ```
 
 ### Alimentando com ataques reais
@@ -321,8 +326,23 @@ Em ambos os casos, o alerta segue o mesmo trio de ações dos outros monitores
 python auth_log_monitor.py
 ```
 
-Para integrar outra ferramenta (Suricata/Snort, etc.) diretamente com o
-dashboard, sem passar pelos monitores acima, envie um POST nesse formato:
+`ids_log_monitor.py` é um quarto processo opcional que faz *tail* do
+`eve.json` do Suricata (Snort3 com o plugin `alert_json` produz um formato
+compatível o suficiente). Ao contrário dos outros monitores, aqui quem decide
+que algo é um ataque é o próprio motor de regras do IDS/IPS (ex.: conjunto
+Emerging Threats) — o script só filtra eventos `event_type: "alert"` por
+gravidade mínima (`DATASENTINEL_EVE_MIN_SEVERITY`), classifica o tipo por
+palavras-chave na assinatura/categoria (`scan` → `port_scan`, `sql injection`
+→ `sql_injection`, `xss` → `xss`, `brute force` → `brute_force`, `dos`/`ddos`
+→ `ddos`, caso contrário fica como anomalia genérica) e repassa — bloqueia
+IP, grava log/e-mail, envia para o dashboard:
+
+```bash
+python ids_log_monitor.py
+```
+
+Para integrar outra ferramenta diretamente com o dashboard, sem passar pelos
+monitores acima, envie um POST nesse formato:
 
 ```python
 import requests
@@ -432,6 +452,7 @@ DATASENTINEL-PYTHON/
 ├── monitor.py             # Coleta de conexoes, deteccao e envio de alertas
 ├── web_log_monitor.py     # Tail de access log (Apache/nginx) p/ SQLi/XSS
 ├── auth_log_monitor.py    # Tail de auth.log/fail2ban.log p/ forca bruta SSH
+├── ids_log_monitor.py     # Tail de eve.json (Suricata/Snort) p/ alertas de IDS/IPS
 ├── alerting.py            # Geolocalizacao de IP e envio de alerta ao dashboard (compartilhado)
 ├── log_tail.py            # Tail de arquivo de log com suporte a rotacao (compartilhado)
 ├── detector.py            # Deteccao por limiar de conexoes/portas + classificacao do tipo

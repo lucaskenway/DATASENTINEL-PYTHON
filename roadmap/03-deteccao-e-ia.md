@@ -33,25 +33,34 @@ IPs, não só análise por IP individual).
 Ainda em aberto: tornar `THRESHOLD`/`PORT_SCAN_THRESHOLD` configuráveis via
 env var em vez de constantes fixas em `detector.py`.
 
-## ~~Sem ingestão de fontes reais de ataque~~ — parcialmente resolvido
+## ~~Sem ingestão de fontes reais de ataque~~ — resolvido
 
-- **Feito**: `web_log_monitor.py` faz *tail* de access log Apache/nginx
-  (formato `combined`) e classifica `sql_injection`/`xss` via regex sobre o
-  path/query decodificado. `auth_log_monitor.py` cobre força bruta de SSH por
-  duas fontes: `auth.log`/`secure` (contagem própria por IP numa janela
-  deslizante) e `fail2ban.log` (repassa direto qualquer linha `Ban`, já que o
-  fail2ban fez sua própria decisão). Os dois reusam o tailing com suporte a
-  rotação de `log_tail.py` e o pipeline de alerta de `alerting.py`.
-- **Ainda falta**: parser para Suricata/Snort (formato EVE JSON) — é a única
-  fonte da lista original ainda não coberta.
-- **Limitações conhecidas**: `web_log_monitor.py` só enxerga metadados de
-  requisição (path/query da linha de log); não inspeciona corpo de POST,
-  então SQLi/XSS via body de formulário/JSON não aparecem no access log
-  padrão. `auth_log_monitor.py` só reconhece as duas mensagens mais comuns de
-  falha do `sshd` (`Failed password`, `Invalid user`); variantes como
-  `Connection closed ... [preauth]` não têm o IP no mesmo formato e ficam de
-  fora.
-- **Esforço**: S/M (o que resta — só o parser Suricata/Snort)
+Todas as fontes originalmente listadas agora têm um parser dedicado, todos
+reusando o tailing com suporte a rotação de `log_tail.py` e o pipeline de
+alerta de `alerting.py`:
+
+- `web_log_monitor.py` — access log Apache/nginx (formato `combined`),
+  classifica `sql_injection`/`xss` via regex sobre o path/query decodificado;
+- `auth_log_monitor.py` — força bruta de SSH por duas fontes: `auth.log`/
+  `secure` (contagem própria por IP numa janela deslizante) e `fail2ban.log`
+  (repassa direto qualquer linha `Ban`, já que o fail2ban fez sua própria
+  decisão);
+- `ids_log_monitor.py` — `eve.json` do Suricata (Snort3 com `alert_json` é
+  compatível o suficiente); diferente dos outros, aqui quem decide que algo é
+  ataque é a própria engine de regras do IDS — o script só filtra por
+  gravidade mínima e classifica o tipo por palavras-chave na assinatura/
+  categoria (`scan`, `sql injection`, `xss`, `brute force`, `dos`/`ddos`).
+
+**Limitações conhecidas**: `web_log_monitor.py` só enxerga metadados de
+requisição (path/query da linha de log); não inspeciona corpo de POST, então
+SQLi/XSS via body de formulário/JSON não aparecem no access log padrão.
+`auth_log_monitor.py` só reconhece as duas mensagens mais comuns de falha do
+`sshd` (`Failed password`, `Invalid user`); variantes como `Connection
+closed ... [preauth]` não têm o IP no mesmo formato e ficam de fora.
+`ids_log_monitor.py` classifica o tipo por palavra-chave simples na
+assinatura/categoria — não tenta mapear as milhares de assinaturas de um
+ruleset (ex.: Emerging Threats) numa taxonomia completa; o que não casar cai
+como "anomalia" genérica.
 
 ## Threat intelligence externa
 
