@@ -3,18 +3,21 @@
 Esta é a parte mais importante para a credibilidade do projeto: hoje o motor de
 detecção é essencialmente um protótipo estático.
 
-## `ai_detector.py` não aprende nada de real
+## ~~`ai_detector.py` não aprende nada de real~~ — resolvido
 
-- **O quê**: treinar o `IsolationForest` com features reais e um dataset que
-  cresce com o tempo (ex.: nº de conexões por IP na última janela, nº de portas
-  distintas tocadas, bytes transferidos), persistir o modelo treinado
-  (`joblib.dump`) e re-treinar periodicamente.
-- **Por quê**: hoje o modelo é treinado uma vez, no import, com 6 pontos fixos
-  hardcoded (`ai_detector.py:6-13`: `[5, 8, 10, 12, 50, 60]`), e é sempre
-  chamado com o mesmo valor fixo `ai_detect(50)` (`monitor.py:78`) — ou seja,
-  o resultado é **sempre o mesmo**, independente do que está de fato
-  acontecendo na rede. Não há aprendizado nem sinal real sendo avaliado.
-- **Esforço**: M/L
+`ai_detect` agora recebe um vetor de features reais por conexão
+(`[conexoes_10s, portas_distintas_60s]`, calculado em `detector.py:record_connection`
+e usado por `monitor.py`), acumula cada amostra observada em
+`data/ai_training_data.jsonl` e re-treina o `IsolationForest` periodicamente
+sobre essa janela de dados reais (`ai_detector.py`), persistindo o modelo em
+`data/ai_model.joblib` via `joblib`. Enquanto não há amostras suficientes
+(`MIN_SAMPLES`), o detector de IA fica em modo "aquecendo" e não classifica
+nada como anomalia — evita falso-positivo/negativo com base estatística vazia.
+
+Próximo passo natural (não feito ainda): adicionar mais features (bytes
+transferidos, duração da conexão) e considerar um dataset separado por
+ambiente/rede, já que hoje o "normal" aprendido é específico da máquina onde
+`monitor.py` roda.
 
 ## Detecção por threshold é ingênua
 

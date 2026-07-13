@@ -4,7 +4,7 @@ import time
 import psutil
 import requests
 
-from detector import detect_suspicious
+from detector import classify_attack, detect_suspicious, record_connection
 from ai_detector import ai_detect
 from firewall import block_ip
 from logger import save_log
@@ -39,6 +39,12 @@ local_ips = [
     "127.0.0.1",
     "0.0.0.0",
 ]
+
+ATTACK_TYPE_LABELS = {
+    "port_scan": "Port Scan",
+    "brute_force": "Forca Bruta",
+    "anomalia": "Anomalia comportamental",
+}
 
 
 def get_geo(ip):
@@ -92,15 +98,20 @@ while True:
                 if ip in local_ips:
                     continue
 
+                local_port = conn.laddr.port if conn.laddr else None
+                conn_count, distinct_ports = record_connection(ip, local_port)
+
                 suspicious = detect_suspicious(ip)
-                ai_result = ai_detect(50)
+                ai_result = ai_detect([conn_count, distinct_ports])
 
                 if suspicious or ai_result:
 
                     geo = get_geo(ip)
+                    attack_type = classify_attack(conn_count, distinct_ports)
+                    type_label = ATTACK_TYPE_LABELS[attack_type]
 
                     message = (
-                        f"ATAQUE detectado de {ip} | "
+                        f"ATAQUE detectado ({type_label}) de {ip} | "
                         f"Localizacao: {geo['location']}"
                     )
 
@@ -128,7 +139,7 @@ while True:
                         "country": geo["country"],
                         "city": geo["city"],
                         "countryCode": geo["countryCode"],
-                        "type": "intrusion",
+                        "type": attack_type,
                         "reason": "+".join(reasons) if reasons else "unknown",
                         "timestamp": time.time(),
                     }
