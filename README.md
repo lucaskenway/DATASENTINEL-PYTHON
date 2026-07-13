@@ -271,6 +271,9 @@ DATASENTINEL_SSH_THRESHOLD=5         # falhas na janela para considerar forca br
 DATASENTINEL_EVE_LOG_PATH=           # caminho do eve.json (Suricata) ou log JSON compativel (Snort3)
 DATASENTINEL_EVE_LOG_POLL=2          # intervalo em segundos entre leituras do arquivo
 DATASENTINEL_EVE_MIN_SEVERITY=3      # piso de gravidade aceito (Suricata: 1=mais grave, numero maior=menos grave)
+
+# Deduplicacao de alertas (opcional — usado por todos os monitores acima)
+DATASENTINEL_DEDUP_WINDOW=60         # janela (segundos) para agrupar alertas repetidos do mesmo IP+tipo
 ```
 
 ### Alimentando com ataques reais
@@ -340,6 +343,17 @@ IP, grava log/e-mail, envia para o dashboard:
 ```bash
 python ids_log_monitor.py
 ```
+
+Os quatro monitores acima (`monitor.py`, `web_log_monitor.py`,
+`auth_log_monitor.py`, `ids_log_monitor.py`) compartilham a mesma
+deduplicação de incidentes (`alerting.py:register_incident`): um mesmo
+IP+tipo de ataque só gera um alerta (log/e-mail/dashboard) por janela de
+`DATASENTINEL_DEDUP_WINDOW` segundos (padrão 60), mesmo que o evento se
+repita muitas vezes nesse intervalo — o próximo alerta, quando a janela
+virar, reporta quantas ocorrências foram suprimidas
+(`+N ocorrencias nos ultimos 60s`). O **bloqueio de IP não é afetado**: ele
+acontece imediatamente a cada evento suspeito, independente da
+deduplicação — só a notificação é agrupada.
 
 Para integrar outra ferramenta diretamente com o dashboard, sem passar pelos
 monitores acima, envie um POST nesse formato:

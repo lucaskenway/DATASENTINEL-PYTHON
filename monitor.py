@@ -2,7 +2,7 @@ import time
 
 import psutil
 
-from alerting import LOCAL_IPS, get_geo, push_alert
+from alerting import LOCAL_IPS, get_geo, push_alert, register_incident, suppressed_suffix
 from detector import classify_attack, detect_suspicious, record_connection
 from ai_detector import ai_detect
 from firewall import block_ip
@@ -39,18 +39,24 @@ while True:
 
                 if suspicious or ai_result:
 
-                    geo = get_geo(ip)
                     attack_type = classify_attack(conn_count, distinct_ports)
+
+                    block_ip(ip)  # bloqueio imediato, independente de dedup
+
+                    should_alert, suppressed = register_incident(ip, attack_type)
+                    if not should_alert:
+                        continue
+
+                    geo = get_geo(ip)
                     type_label = ATTACK_TYPE_LABELS[attack_type]
 
                     message = (
                         f"ATAQUE detectado ({type_label}) de {ip} | "
                         f"Localizacao: {geo['location']}"
+                        f"{suppressed_suffix(suppressed)}"
                     )
 
                     save_log(message)
-
-                    block_ip(ip)
 
                     send_email(
                         "ALERTA DataSentinel",

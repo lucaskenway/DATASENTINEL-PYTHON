@@ -15,7 +15,7 @@ import os
 import re
 import time
 
-from alerting import LOCAL_IPS, get_geo, push_alert
+from alerting import LOCAL_IPS, get_geo, push_alert, register_incident, suppressed_suffix
 from email_alert import send_email
 from firewall import block_ip
 from log_tail import follow
@@ -75,14 +75,20 @@ def watch(path):
         category = alert.get("category") or ""
         attack_type = classify_alert(signature, category)
 
+        block_ip(ip)  # bloqueio imediato, independente de dedup
+
+        should_alert, suppressed = register_incident(ip, attack_type)
+        if not should_alert:
+            continue
+
         geo = get_geo(ip)
         message = (
             f"ATAQUE detectado (IDS: {signature}) de {ip} | "
             f"Localizacao: {geo['location']}"
+            f"{suppressed_suffix(suppressed)}"
         )
 
         save_log(message)
-        block_ip(ip)
         send_email("ALERTA DataSentinel", message)
 
         payload = {

@@ -10,7 +10,7 @@ import re
 import time
 from urllib.parse import unquote
 
-from alerting import LOCAL_IPS, get_geo, push_alert
+from alerting import LOCAL_IPS, get_geo, push_alert, register_incident, suppressed_suffix
 from email_alert import send_email
 from firewall import block_ip
 from log_tail import follow
@@ -90,16 +90,22 @@ def watch(path):
         if not attack_type:
             continue
 
+        block_ip(ip)  # bloqueio imediato, independente de dedup
+
+        should_alert, suppressed = register_incident(ip, attack_type)
+        if not should_alert:
+            continue
+
         geo = get_geo(ip)
         label = ATTACK_TYPE_LABELS[attack_type]
         message = (
             f"ATAQUE detectado ({label}) de {ip} | "
             f"Requisicao: {match.group('method')} {request_path[:120]} | "
             f"Localizacao: {geo['location']}"
+            f"{suppressed_suffix(suppressed)}"
         )
 
         save_log(message)
-        block_ip(ip)
         send_email("ALERTA DataSentinel", message)
 
         payload = {

@@ -1,4 +1,5 @@
 import os
+import time
 
 import requests
 
@@ -13,6 +14,38 @@ if not INGEST_TOKEN:
     )
 
 LOCAL_IPS = {"127.0.0.1", "0.0.0.0", "::1"}
+
+DEDUP_WINDOW_SECONDS = float(os.environ.get("DATASENTINEL_DEDUP_WINDOW", "60"))
+
+_incidents = {}  # (ip, attack_type) -> {"window_start": ts, "count": int}
+
+
+def register_incident(ip, attack_type):
+    """Agrupa eventos repetidos do mesmo IP+tipo numa janela de tempo, para
+    que um unico ataque continuo (ex.: brute force rodando por minutos) gere
+    um alerta a cada janela, com contador, em vez de um log/e-mail/push por
+    evento individual. O bloqueio de IP (firewall.block_ip) deve continuar
+    acontecendo sempre, independente do resultado daqui — so a notificacao
+    (log/e-mail/dashboard) e' throttled.
+
+    Retorna (deve_alertar, suprimidos_desde_o_ultimo_alerta)."""
+    key = (ip, attack_type)
+    now = time.time()
+    state = _incidents.get(key)
+
+    if state is None or now - state["window_start"] >= DEDUP_WINDOW_SECONDS:
+        suppressed = state["count"] - 1 if state else 0
+        _incidents[key] = {"window_start": now, "count": 1}
+        return True, suppressed
+
+    state["count"] += 1
+    return False, 0
+
+
+def suppressed_suffix(suppressed):
+    if not suppressed:
+        return ""
+    return f" | +{suppressed} ocorrencias nos ultimos {int(DEDUP_WINDOW_SECONDS)}s"
 
 
 def push_alert(payload):

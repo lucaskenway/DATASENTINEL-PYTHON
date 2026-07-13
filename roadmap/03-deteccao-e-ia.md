@@ -71,11 +71,20 @@ como "anomalia" genérica.
   negativo.
 - **Esforço**: M
 
-## Falta de deduplicação e correlação de eventos
+## ~~Falta de deduplicação e correlação de eventos~~ — resolvido
 
-- **O quê**: agrupar múltiplos alertas do mesmo IP num único "incidente" com
-  contador, em vez de tratar cada conexão suspeita como evento isolado.
-- **Por quê**: com o loop de `monitor.py:62` rodando a cada 3s e testando todas
-  as conexões ativas, um único IP em brute force pode gerar dezenas de
-  eventos/e-mails em poucos segundos — não há supressão/agrupamento.
-- **Esforço**: M
+`alerting.py:register_incident(ip, attack_type)` agrupa eventos repetidos do
+mesmo IP+tipo numa janela de tempo (`DATASENTINEL_DEDUP_WINDOW`, padrão 60s):
+só o primeiro evento da janela gera log/e-mail/push; os demais são
+suprimidos, e o alerta da janela seguinte (se o ataque continuar) reporta
+quantas ocorrências foram suprimidas (`+N ocorrencias nos ultimos 60s`). O
+bloqueio de IP (`firewall.block_ip`) continua acontecendo a cada evento,
+imediatamente — só a notificação é agrupada, então a defesa não fica mais
+lenta. Os quatro monitores (`monitor.py`, `web_log_monitor.py`,
+`auth_log_monitor.py`, `ids_log_monitor.py`) usam essa mesma função.
+
+Ainda não feito: correlação *entre* fontes diferentes (ex.: o mesmo IP
+aparecendo em `monitor.py` por conexões e em `ids_log_monitor.py` por uma
+assinatura Suricata) continua gerando dois incidentes separados, já que a
+chave de dedup é por processo (cada monitor roda com seu próprio dicionário
+em memória, não há estado compartilhado entre processos).
