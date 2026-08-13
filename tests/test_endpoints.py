@@ -83,3 +83,9 @@ def test_endpoints_flow():
     if ingest_token:
         riti = requests.post(f"{BASE}/api/ingest_alert", json={"ip": "5.6.7.8"}, headers={"Authorization": f"Bearer {ingest_token}"})
         assert riti.status_code == 200
+
+
+def test_icon_route_serves_svg():
+    r = requests.get(f"{BASE}/icon.svg")
+    assert r.status_code == 200
+    assert r.headers.get("Content-Type", "").startswith("image/svg+xml")

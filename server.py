@@ -339,6 +339,28 @@ def style():
     return response
 
 
+@app.route("/manifest.json")
+def manifest():
+    response = send_from_directory("templates", "manifest.json")
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Content-Type"] = "application/manifest+json"
+    return response
+
+
+@app.route("/sw.js")
+def service_worker():
+    response = send_from_directory("templates", "sw.js")
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.route("/icon.svg")
+def icon():
+    response = send_from_directory("templates", "icon.svg")
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 @app.route("/imagens/<path:filename>")
 @login_required
 def image(filename):

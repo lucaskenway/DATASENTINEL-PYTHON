@@ -93,14 +93,18 @@ def sequential_mode(session):
     print("Modo sequencial finalizado.")
 
 
+def parallel_worker(session):
+    for _ in range(6):
+        severity = random.choice(["low", "medium", "high"])
+        send_alert(session, severity)
+        time.sleep(random.uniform(0.8, 1.6))
+
+
 def parallel_mode(session):
     print("Modo paralelo: gerando 3 fluxos de ataque simultâneos...")
     threads = []
     for _ in range(3):
-        thread = threading.Thread(
-            target=lambda: [send_alert(session, random.choice(["low", "medium", "high"])) or time.sleep(random.uniform(0.8, 1.6)) for _ in range(6)],
-            daemon=True,
-        )
+        thread = threading.Thread(target=parallel_worker, args=(session,), daemon=True)
         thread.start()
         threads.append(thread)
     for thread in threads:
