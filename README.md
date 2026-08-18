@@ -231,6 +231,45 @@ python server.py
 Acesse no navegador: **http://localhost:5000** e faça login com as credenciais
 configuradas. Todas as páginas e APIs exigem login — não há mais acesso anônimo.
 
+### Executando com Docker
+
+O projeto também pode ser executado em container com Docker Compose.
+
+#### 1. Configure o arquivo `.env`
+
+```bash
+copy .env.example .env
+```
+
+Edite as variáveis mínimas antes de subir o container:
+
+```env
+DATASENTINEL_ADMIN_USER=admin
+DATASENTINEL_ADMIN_PASSWORD=sua-senha-forte
+DATASENTINEL_SECRET_KEY=gere-um-token-seguro
+DATASENTINEL_INGEST_TOKEN=gere-um-token-de-ingestao
+```
+
+#### 2. Build e execução
+
+```bash
+docker compose up --build
+```
+
+A aplicação será exposta em:
+
+```text
+http://localhost:5000/login
+```
+
+#### 3. Parar o container
+
+```bash
+docker compose down
+```
+
+> O container usa a porta `5000` do host para a interface web do DataSentinel.
+
 ### Variaveis de Ambiente
 
 ```env
