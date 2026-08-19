@@ -22,6 +22,7 @@ from flask_socketio import SocketIO, emit
 from werkzeug.security import check_password_hash, generate_password_hash
 
 import psutil
+from database import count_alerts, get_alerts, save_alert
 
 load_dotenv()
 
@@ -228,7 +229,7 @@ def logout():
 # ---------------------------------------------------------------------------
 
 _state = {
-    "threats_total": 0,
+    "threats_total": count_alerts(),
 }
 
 _last_net = None
@@ -312,6 +313,13 @@ def _append_alert_log(payload):
             f.write(line + "\n")
     except OSError:
         pass
+
+
+def _record_alert(payload):
+    _state["threats_total"] += 1
+    payload["threats_total"] = _state["threats_total"]
+    save_alert(payload)
+    _append_alert_log(payload)
 
 
 # ---------------------------------------------------------------------------
@@ -426,6 +434,14 @@ def api_logs():
     return jsonify({"lines": [ln.rstrip("\n") for ln in lines]})
 
 
+@app.route("/api/alerts")
+@login_required
+def api_alerts():
+    limit = request.args.get("n", default=100, type=int)
+    limit = max(1, min(limit, 500))
+    return jsonify({"alerts": get_alerts(limit)})
+
+
 @app.route("/test_alert", methods=["POST"])
 @app.route("/test_alert/<ip>", methods=["POST"])
 @login_required
@@ -465,9 +481,7 @@ def test_alert(ip=None):
         }
 
     payload = _sanitize_alert(payload)
-    _state["threats_total"] += 1
-    payload["threats_total"] = _state["threats_total"]
-    _append_alert_log(payload)
+    _record_alert(payload)
     socketio.emit("new_alert", payload)
     return jsonify(success=True, payload=payload)
 
@@ -490,9 +504,7 @@ def ingest_alert():
         abort(400, description="Payload deve ser um objeto JSON")
 
     clean = _sanitize_alert(data)
-    _state["threats_total"] += 1
-    clean["threats_total"] = _state["threats_total"]
-    _append_alert_log(clean)
+    _record_alert(clean)
     socketio.emit("new_alert", clean)
     return jsonify(success=True)
 

@@ -1,4 +1,19 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: datasentinel-postgres
+    environment:
+      POSTGRES_DB: datasentinel
+      POSTGRES_USER: datasentinel
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - datasentinel-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U datasentinel -d datasentinel"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   datasentinel:
     build:
       context: .
@@ -9,8 +24,15 @@ services:
       DATASENTINEL_HOST: 0.0.0.0
       DATASENTINEL_PORT: 5000
       DATASENTINEL_ALLOWED_ORIGINS: "http://localhost:5000,http://127.0.0.1:5000"
+      DATASENTINEL_DATABASE_URL: postgresql://datasentinel:${POSTGRES_PASSWORD}@postgres:5432/datasentinel
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports:
       - "5000:5000"
     volumes:
       - ./ataques.log:/app/ataques.log
     restart: unless-stopped
+
+volumes:
+  datasentinel-postgres-data:

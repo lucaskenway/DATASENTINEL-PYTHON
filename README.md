@@ -73,6 +73,7 @@ DATASENTINEL_ADMIN_USER=admin
 DATASENTINEL_ADMIN_PASSWORD=uma-senha-forte
 DATASENTINEL_SECRET_KEY=texto-longo-e-aleatorio
 DATASENTINEL_INGEST_TOKEN=outro-texto-longo-e-aleatorio
+POSTGRES_PASSWORD=uma-senha-forte-do-banco
 ```
 
 Se você não criar o `.env`, o sistema ainda sobe, mas gera credenciais temporárias e mostra a senha no terminal.
@@ -256,6 +257,10 @@ DATASENTINEL_INGEST_TOKEN=gere-um-token-de-ingestao
 docker compose up --build
 ```
 
+O Compose inicia o PostgreSQL automaticamente e guarda os dados no volume
+`datasentinel-postgres-data`. Os alertas passam a sobreviver a reinícios do
+servidor e do container.
+
 A aplicação será exposta em:
 
 ```text
@@ -278,6 +283,11 @@ DATASENTINEL_ADMIN_USER=admin
 DATASENTINEL_ADMIN_PASSWORD=defina-uma-senha-forte
 DATASENTINEL_SECRET_KEY=gere-com-secrets.token_hex-32
 DATASENTINEL_INGEST_TOKEN=gere-com-secrets.token_urlsafe-24
+
+# PostgreSQL
+POSTGRES_PASSWORD=defina-uma-senha-forte
+# Fora do Docker, a URL deve apontar para localhost:
+# DATASENTINEL_DATABASE_URL=postgresql://datasentinel:SENHA@127.0.0.1:5432/datasentinel
 
 # Rede (opcional)
 DATASENTINEL_HOST=127.0.0.1        # 0.0.0.0 expõe a outras maquinas na rede — use com cuidado
@@ -557,6 +567,7 @@ estado (`/test_alert*`, `/logout`) também exigem o token CSRF enviado no header
 | `/` | GET | Dashboard principal |
 | `/api/metrics` | GET | Metricas do sistema (CPU, RAM, rede, etc.) |
 | `/api/logs?n=60` | GET | Ultimas N linhas do log |
+| `/api/alerts?n=100` | GET | Ultimos alertas persistidos no PostgreSQL |
 | `/test_alert` | POST | Dispara alerta de teste (requer CSRF) |
 | `/test_alert/<ip>` | POST | Dispara alerta com IP especifico (requer CSRF) |
 | `/api/ingest_alert` | POST | Ingestao de alertas reais, autenticado via `Authorization: Bearer <DATASENTINEL_INGEST_TOKEN>` (usado por `monitor.py`) |
