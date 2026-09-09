@@ -1,96 +1,53 @@
-import json
 import os
 
-import psycopg
+from pymongo import DESCENDING, MongoClient
+
+MONGODB_URI = os.environ.get("DATASENTINEL_MONGODB_URI", "").strip()
+MONGODB_DB_NAME = os.environ.get("DATASENTINEL_MONGODB_DB", "datasentinel").strip()
+
+_client = None
 
 
-DATABASE_URL = os.environ.get("DATASENTINEL_DATABASE_URL", "").strip()
-
-
-def _connect():
-    if not DATABASE_URL:
+def _get_collection():
+    global _client
+    if not MONGODB_URI:
         return None
-    return psycopg.connect(DATABASE_URL)
+    if _client is None:
+        _client = MongoClient(MONGODB_URI)
+    return _client[MONGODB_DB_NAME]["alerts"]
 
 
 def init_db():
-    connection = _connect()
-    if connection is None:
+    collection = _get_collection()
+    if collection is None:
         return
 
-    with connection:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS alerts (
-                    id BIGSERIAL PRIMARY KEY,
-                    timestamp DOUBLE PRECISION NOT NULL,
-                    ip VARCHAR(200),
-                    attack_type VARCHAR(200),
-                    country VARCHAR(200),
-                    city VARCHAR(200),
-                    latitude DOUBLE PRECISION,
-                    longitude DOUBLE PRECISION,
-                    message VARCHAR(200),
-                    payload JSONB NOT NULL
-                )
-                """
-            )
-            cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_alerts_timestamp ON alerts(timestamp)"
-            )
+    collection.create_index("timestamp")
 
 
 def save_alert(payload):
-    connection = _connect()
-    if connection is None:
+    collection = _get_collection()
+    if collection is None:
         return
 
-    with connection:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                INSERT INTO alerts (
-                    timestamp, ip, attack_type, country, city,
-                    latitude, longitude, message, payload
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)
-                """,
-                (
-                    payload.get("timestamp"),
-                    payload.get("ip"),
-                    payload.get("type"),
-                    payload.get("country"),
-                    payload.get("city"),
-                    payload.get("lat"),
-                    payload.get("lon"),
-                    payload.get("message"),
-                    json.dumps(payload, ensure_ascii=False),
-                ),
-            )
+    collection.insert_one(dict(payload))
 
 
 def count_alerts():
-    connection = _connect()
-    if connection is None:
+    collection = _get_collection()
+    if collection is None:
         return 0
 
-    with connection:
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT COUNT(*) FROM alerts")
-            return int(cursor.fetchone()[0])
+    return collection.count_documents({})
 
 
 def get_alerts(limit=100):
-    connection = _connect()
-    if connection is None:
+    collection = _get_collection()
+    if collection is None:
         return []
 
-    with connection:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT payload FROM alerts ORDER BY id DESC LIMIT %s", (limit,)
-            )
-            return [row[0] for row in cursor.fetchall()]
+    cursor = collection.find({}, {"_id": 0}).sort("_id", DESCENDING).limit(limit)
+    return list(cursor)
 
 
 init_db()
