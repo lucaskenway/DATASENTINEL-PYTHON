@@ -275,6 +275,51 @@ docker compose down
 
 > O container usa a porta `5000` do host para a interface web do DataSentinel.
 
+### Deploy na AWS (ECS Fargate + DocumentDB)
+
+Infraestrutura como codigo em `infra/` (Terraform): VPC dedicada, ECS Fargate
+rodando `server.py` atras de um Application Load Balancer, e DocumentDB
+(compativel com Mongo) para persistir os alertas. `monitor.py` e os outros
+coletores continuam rodando localmente, apontando `DATASENTINEL_SERVER_URL`
+para a URL publica do ALB.
+
+Pre-requisitos: `terraform`, `aws` CLI configurado (`aws configure`) e
+`docker`.
+
+```bash
+cd infra
+
+# 1) Cria so o repositorio ECR (para termos onde publicar a imagem)
+terraform init
+terraform apply -target=aws_ecr_repository.this
+
+# 2) Build e push da imagem
+ECR_URL=$(terraform output -raw ecr_repository_url)
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin "${ECR_URL%/*}"
+docker build -t "$ECR_URL:latest" ..
+docker push "$ECR_URL:latest"
+
+# 3) Cria o restante da infra (VPC, DocumentDB, ECS, ALB) apontando para a imagem publicada
+terraform apply
+
+# 4) URL publica e segredos gerados
+terraform output alb_dns_name
+terraform output secrets_manager_secret_arn
+```
+
+As credenciais de admin, `SECRET_KEY`, token de ingestao e a URI do Mongo são
+geradas pelo Terraform e guardadas no Secrets Manager (nunca em texto puro no
+repositório). Para ver a senha de admin gerada:
+
+```bash
+aws secretsmanager get-secret-value \
+  --secret-id datasentinel/app \
+  --query SecretString --output text | jq .
+```
+
+> Sem domínio configurado por padrão: o acesso é via HTTP no DNS do próprio
+> ALB. Para destruir tudo depois: `terraform destroy` dentro de `infra/`.
+
 ### Variaveis de Ambiente
 
 ```env

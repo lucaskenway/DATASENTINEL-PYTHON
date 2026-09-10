@@ -1,0 +1,6 @@
+# Copie para terraform.tfvars se quiser sobrescrever os defaults.
+# Nunca commite terraform.tfvars se ele tiver algo sensivel.
+
+aws_region   = "us-east-1"
+project_name = "datasentinel"
+image_tag    = "latest"
