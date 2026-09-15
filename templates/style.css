@@ -289,9 +289,8 @@ body {
   display: block;
 }
 
-/* ── Leaflet: dark tile filter (OSM → fundo preto, texto branco) ── */
+/* Stadia alidade_smooth_dark ja e nativamente escuro, sem necessidade de filtro */
 .leaflet-tile-pane {
-  filter: grayscale(100%) invert(100%) brightness(78%) contrast(95%);
 }
 
 /* Leaflet overrides */
