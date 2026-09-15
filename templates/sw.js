@@ -1,12 +1,12 @@
-const CACHE_NAME = 'datasentinel-v1';
+const CACHE_NAME = 'datasentinel-v2';
 const ASSETS = [
-  '/',
-  '/login',
   '/script.js',
   '/style.css',
   '/manifest.json',
   '/icon.svg',
 ];
+// Paginas dinamicas (sessao, CSRF) nunca devem ser servidas do cache.
+const NEVER_CACHE_PATHS = ['/', '/login'];
 
 self.addEventListener('install', event => {
   event.waitUntil(
@@ -29,6 +29,7 @@ self.addEventListener('fetch', event => {
 
   if (event.request.method !== 'GET') return;
   if (requestUrl.origin !== self.location.origin) return;
+  if (NEVER_CACHE_PATHS.includes(requestUrl.pathname)) return;
 
   event.respondWith(
     caches.match(event.request).then(cached => {

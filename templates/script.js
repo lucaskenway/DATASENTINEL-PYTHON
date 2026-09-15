@@ -56,10 +56,15 @@ function initLeafletMap() {
       tap: false,
     });
 
-    /* OpenStreetMap — filtro dark aplicado via CSS no .leaflet-tile-pane */
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a>',
-      maxZoom: 19,
+    /* Stadia Maps (Alidade Smooth Dark) — tiles em tema escuro.
+       tile.openstreetmap.org e basemaps.cartocdn.com bloqueiam uso anonimo
+       fora de politica/regiao. Stadia libera uso sem API key quando o
+       Referer e localhost/127.0.0.1 (apenas para desenvolvimento local —
+       em producao/deploy publico e necessaria uma API key gratuita em
+       stadiamaps.com, passada via ?api_key= na URL). */
+    L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; <a href="https://stadiamaps.com/" target="_blank">Stadia Maps</a> &copy; <a href="https://openmaptiles.org/" target="_blank">OpenMapTiles</a> &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors',
+      maxZoom: 20,
     }).addTo(leafletMap);
 
     L.control.zoom({ position: 'bottomleft' }).addTo(leafletMap);
@@ -75,26 +80,7 @@ function initLeafletMap() {
     );
     window.addEventListener('resize', () => leafletMap && leafletMap.invalidateSize());
 
-    setTimeout(() => drawDefenderMarker(state.defender.lat, state.defender.lon), 700);
-
   } catch (e) { console.error('Leaflet init:', e); }
-}
-
-function drawDefenderMarker(lat, lon) {
-  if (!leafletMap) return;
-  const icon = L.divIcon({
-    className: '',
-    html: `<div style="
-      width:14px;height:14px;border-radius:50%;
-      background:rgba(77,255,154,0.25);
-      border:2px solid #4dff9a;
-      box-shadow:0 0 12px #4dff9a, 0 0 24px rgba(77,255,154,0.4);
-    "></div>`,
-    iconSize: [14, 14],
-    iconAnchor: [7, 7],
-  });
-  const m = L.marker([lat, lon], { icon, interactive: false }).addTo(leafletMap);
-  m.bindTooltip('DEFENSOR · DataSentinel', { permanent: false, className: 'leaflet-dark-tooltip' });
 }
 
 function addLeafletMarker(lat, lon, meta) {

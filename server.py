@@ -157,7 +157,10 @@ def csrf_protect(view):
 def set_security_headers(response):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
-    response.headers["Referrer-Policy"] = "no-referrer"
+    # "strict-origin-when-cross-origin" (o default dos navegadores) envia so a
+    # origem (sem path/query) em requisicoes cross-origin — necessario para o
+    # tile provider (Stadia Maps) reconhecer o uso local via Referer.
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Cache-Control"] = "no-store"
     return response
 
@@ -325,6 +328,11 @@ def _record_alert(payload):
 # ---------------------------------------------------------------------------
 # Rotas
 # ---------------------------------------------------------------------------
+
+@app.route("/healthz")
+def healthz():
+    return "ok", 200
+
 
 @app.route("/")
 @login_required
