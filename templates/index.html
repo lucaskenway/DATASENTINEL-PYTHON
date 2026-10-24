@@ -5,9 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="csrf-token" content="{{ csrf_token }}">
 <title>DataSentinel - Cyber Defense System</title>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"
-      integrity="sha512-h9FcoyWjHcOcmEVkxOfTLnmZFWIH0iZhZT1H2TbOq55xssQGEJHEaIm+PgoUaZbRvQTNTluNOEfb1ZRy6D3BOw=="
-      crossorigin="anonymous" referrerpolicy="no-referrer"/>
 <link rel="stylesheet" href="style.css">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#03080d">
@@ -23,8 +20,14 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"
         integrity="sha256-SERKgtTty1vsDxll+qzd4Y2cF9swY9BCq62i9wXJ9Uo="
         crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"
-        integrity="sha512-puJW3E/qXDqYp9IfhAI54BJEaWIfloJ7JWs7OeD5i6ruC9JZL1gERT1wjtwXFlh7CjE7ZJ+/vcRZRkIYIb6p4g=="
+<script src="https://cdn.jsdelivr.net/npm/d3-array@3.2.4/dist/d3-array.min.js"
+        integrity="sha384-VpKMdU+TlpggHFip46tJ/xkFUs8NFBwLqUMo3+3uiu411lU6eUQYsHVU+JFpA5ja"
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3-geo@3.1.1/dist/d3-geo.min.js"
+        integrity="sha384-VNiKRUXp0MmglFfqDwkfuk+Y78C3WTJShdKSaFwOacLR3UmamxHIJLBTD3BadIXD"
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"
+        integrity="sha384-Ukv1p/xTma6P4/2bY5KzWBw+ydSpXmhCMtyciIQVDJ1RmOxtCYNMF1uXT9T63H67"
         crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 </head>
 <body>
@@ -233,7 +236,7 @@
               <select class="region-select mono" id="map-mode"><option>MUNDO ▾</option></select>
             </div>
             <div class="map-leaflet-wrap">
-              <div id="threat-map" class="leaflet-map-container" aria-label="Mapa de ataques"></div>
+              <div id="threat-map" class="globe-container" aria-label="Globo de ataques"></div>
               <div class="map-overlays" aria-hidden="true">
                 <div class="radar"></div>
                 <div class="map-frame-corner tl"></div>
@@ -244,6 +247,15 @@
                 <div class="map-hud-corner br mono">CORREL · DST</div>
                 <div class="map-label" id="mapLabel" aria-live="polite">Aguardando ataques…</div>
               </div>
+              <aside class="attacker-card" id="attackerCard" aria-label="Origem do ataque" hidden>
+                <button class="attacker-close" id="ac-close" type="button" aria-label="Fechar">×</button>
+                <div class="attacker-kicker mono">ORIGEM DO ATAQUE</div>
+                <h3 class="attacker-city" id="ac-city"></h3>
+                <dl class="attacker-rows mono" id="ac-rows"></dl>
+                <iframe class="attacker-frame" id="ac-frame" title="Mapa da região de origem" loading="lazy" referrerpolicy="no-referrer"></iframe>
+                <a class="attacker-map-btn mono" id="ac-map" target="_blank" rel="noopener noreferrer">VER REGIÃO NO MAPA ↗</a>
+                <p class="attacker-note">Localização aproximada pelo IP (cidade/provedor). Não é o endereço do atacante.</p>
+              </aside>
             </div>
             <div class="attack-log">
               <div class="attack-log-header mono">

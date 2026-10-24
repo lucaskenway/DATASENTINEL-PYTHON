@@ -63,37 +63,42 @@ def push_alert(payload):
         pass
 
 
+_UNKNOWN_GEO = {
+    "location": "Desconhecido",
+    "lat": None,
+    "lon": None,
+    "country": None,
+    "region": None,
+    "city": None,
+    "countryCode": None,
+    "isp": None,
+    "org": None,
+}
+
+
 def get_geo(ip):
+    """Localizacao APROXIMADA do IP (cidade/regiao do provedor), nunca o
+    endereco real de quem esta por tras dele."""
     try:
         response = requests.get(
             f"http://ip-api.com/json/{ip}",
+            params={"lang": "pt-BR"},
             timeout=4,
         )
         data = response.json()
         if data.get("status") == "fail":
-            return {
-                "location": "Desconhecido",
-                "lat": None,
-                "lon": None,
-                "country": None,
-                "city": None,
-                "countryCode": None,
-            }
+            return dict(_UNKNOWN_GEO)
         loc = f"{data.get('country') or '?'} - {data.get('city') or '?'}"
         return {
             "location": loc,
             "lat": data.get("lat"),
             "lon": data.get("lon"),
             "country": data.get("country"),
+            "region": data.get("regionName"),
             "city": data.get("city"),
             "countryCode": data.get("countryCode"),
+            "isp": data.get("isp"),
+            "org": data.get("org"),
         }
     except Exception:
-        return {
-            "location": "Desconhecido",
-            "lat": None,
-            "lon": None,
-            "country": None,
-            "city": None,
-            "countryCode": None,
-        }
+        return dict(_UNKNOWN_GEO)
