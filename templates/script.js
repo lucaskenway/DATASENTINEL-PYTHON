@@ -36,98 +36,357 @@ let atkPageDonut      = null;
 let netPageChart      = null;
 let connsPageChart    = null;
 
-/* ────────────────── LEAFLET MAP ────────────────── */
-let leafletMap        = null;
-let mapZoomTimer      = null;
-let mapLabelTimer     = null;
+/* ────────────────── HOLOGRAPHIC GLOBE ────────────────── */
+/* Globo ortografico em Canvas 2D (d3-geo + topojson-client).
+   Cores lidas das variaveis CSS existentes — nenhuma cor nova no tema. */
+const GLOBE_LAND_URL   = 'https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/land-110m.json';
+const GLOBE_LAND_SRI   = 'sha384-5oFOGoMd0tkagYW08lVco4uAi7XDEDBwBxOdeKx+SA1ihbsHiR/aFAJGretluTzG';
+const GLOBE_HOME       = [0, -20];   /* rotacao inicial (lon 0, lat 20), igual ao centro do antigo mapa */
+const GLOBE_SPIN_DEG_S = 4;          /* rotacao automatica, graus por segundo */
+const GLOBE_IDLE_MS    = 2500;       /* volta a girar sozinho depois da interacao */
+const GLOBE_ZOOM_MIN   = 0.8;
+const GLOBE_ZOOM_MAX   = 3;
+const GLOBE_FOCUS_ZOOM = 1.6;
+const GLOBE_ARC_MS     = 6000;
+const GLOBE_PULSE_MS   = 2200;
 
-function initLeafletMap() {
-  const container = document.getElementById('threat-map');
-  if (!container || !window.L) return;
+const globe = {
+  canvas: null, ctx: null, tooltip: null,
+  width: 0, height: 0, dpr: 1,
+  front: null, back: null, path: null, backPath: null,
+  sphere: { type: 'Sphere' }, graticule: null, land: null,
+  rotation: [...GLOBE_HOME], zoom: 1,
+  dragging: false, lastPointer: null, lastInteraction: 0,
+  tween: null, focusTimer: null,
+  markers: [], arcs: [],
+  colors: null, lastFrame: 0,
+};
+let mapLabelTimer = null;
 
-  try {
-    leafletMap = L.map('threat-map', {
-      center: [20, 0],
-      zoom: 3,
-      zoomControl: false,
-      minZoom: 2,
-      maxZoom: 18,
-      worldCopyJump: true,
-      tap: false,
-    });
-
-    /* Stadia Maps (Alidade Smooth Dark) — tiles em tema escuro.
-       tile.openstreetmap.org e basemaps.cartocdn.com bloqueiam uso anonimo
-       fora de politica/regiao. Stadia libera uso sem API key quando o
-       Referer e localhost/127.0.0.1 (apenas para desenvolvimento local —
-       em producao/deploy publico e necessaria uma API key gratuita em
-       stadiamaps.com, passada via ?api_key= na URL). */
-    L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; <a href="https://stadiamaps.com/" target="_blank">Stadia Maps</a> &copy; <a href="https://openmaptiles.org/" target="_blank">OpenMapTiles</a> &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors',
-      maxZoom: 20,
-    }).addTo(leafletMap);
-
-    L.control.zoom({ position: 'bottomleft' }).addTo(leafletMap);
-    L.control.scale({ imperial: false, position: 'bottomright' }).addTo(leafletMap);
-
-    /* Fix obrigatório para layout flex/grid: recalcula tamanho várias vezes */
-    [80, 250, 500, 900].forEach(ms =>
-      setTimeout(() => {
-        if (!leafletMap) return;
-        leafletMap.invalidateSize({ animate: false, pan: false });
-        leafletMap.eachLayer(l => { if (l.redraw) l.redraw(); });
-      }, ms)
-    );
-    window.addEventListener('resize', () => leafletMap && leafletMap.invalidateSize());
-
-  } catch (e) { console.error('Leaflet init:', e); }
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
-function addLeafletMarker(lat, lon, meta) {
-  if (!leafletMap) return;
-  const sev = meta.severity || 'high';
-  const color = sev === 'high' ? '#ff4d6d' : sev === 'medium' ? '#ffcc66' : '#66d9ff';
+function withAlpha(hex, a) {
+  const n = parseInt(hex.replace('#', ''), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
 
-  /* Inner filled dot */
-  const dot = L.circleMarker([lat, lon], {
-    radius: 5,
-    color: color,
-    fillColor: color,
-    fillOpacity: 0.8,
-    weight: 1.5,
-    interactive: true,
-  }).addTo(leafletMap);
-
-  if (meta.ip) {
-    const loc = meta.location ? ` · ${escHtml(meta.location)}` : '';
-    dot.bindTooltip(`${escHtml(meta.ip)}${loc}`, { permanent: false, className: 'leaflet-dark-tooltip' });
+function initGlobe() {
+  const container = document.getElementById('threat-map');
+  if (!container || !window.d3 || !d3.geoOrthographic) {
+    console.error('Globe init: d3-geo indisponivel');
+    return;
   }
 
-  /* Expanding ring animation */
-  const ring = L.circleMarker([lat, lon], {
-    radius: 5, color, fillColor: 'transparent',
-    fillOpacity: 0, weight: 1.5, opacity: 0.8,
-    interactive: false,
-  }).addTo(leafletMap);
+  globe.colors = { neon: cssVar('--neon'), neon2: cssVar('--neon2'), cyan: cssVar('--cyan') };
 
-  let radius = 5, opacity = 0.8;
-  const expand = () => {
-    radius += 0.8; opacity -= 0.025;
-    if (!leafletMap || !leafletMap.hasLayer(ring)) return;
-    ring.setRadius(radius);
-    ring.setStyle({ opacity });
-    if (opacity > 0 && radius < 28) requestAnimationFrame(expand);
-    else if (leafletMap && leafletMap.hasLayer(ring)) leafletMap.removeLayer(ring);
-  };
-  requestAnimationFrame(expand);
+  globe.canvas  = document.createElement('canvas');
+  globe.canvas.className = 'globe-canvas';
+  globe.ctx     = globe.canvas.getContext('2d');
+  globe.tooltip = document.createElement('div');
+  globe.tooltip.className = 'globe-tooltip mono';
+  container.append(globe.canvas, globe.tooltip);
 
-  /* Auto-remove dot */
-  setTimeout(() => {
-    if (leafletMap && leafletMap.hasLayer(dot)) leafletMap.removeLayer(dot);
-  }, MARKER_LIFETIME_MS);
+  globe.front = d3.geoOrthographic().clipAngle(90).precision(0.6);
+  /* Hemisferio de tras visto "atraves" do globo (efeito holografico) */
+  globe.back  = d3.geoOrthographic().clipAngle(90).precision(0.6).reflectX(true);
+  globe.graticule = d3.geoGraticule10();
+
+  resizeGlobe();
+  new ResizeObserver(resizeGlobe).observe(container);
+  bindGlobeInteraction();
+
+  fetch(GLOBE_LAND_URL, { integrity: GLOBE_LAND_SRI })
+    .then(r => r.json())
+    .then(topo => { globe.land = topojson.feature(topo, topo.objects.land); })
+    .catch(e => console.warn('Globe land data:', e));
+
+  requestAnimationFrame(globeFrame);
 }
 
-/* Redesenha no mapa um alerta que ja tinha expirado (marcador removido apos MARKER_LIFETIME_MS) */
+function resizeGlobe() {
+  const box = globe.canvas.parentElement.getBoundingClientRect();
+  if (!box.width || !box.height) return;
+  globe.dpr    = window.devicePixelRatio || 1;
+  globe.width  = box.width;
+  globe.height = box.height;
+  globe.canvas.width  = Math.round(box.width * globe.dpr);
+  globe.canvas.height = Math.round(box.height * globe.dpr);
+  globe.ctx.setTransform(globe.dpr, 0, 0, globe.dpr, 0, 0);
+}
+
+function globeRadius() {
+  return Math.min(globe.width, globe.height) * 0.44 * globe.zoom;
+}
+
+function syncProjections() {
+  const r = globeRadius();
+  const [lambda, phi] = globe.rotation;
+  const center = [globe.width / 2, globe.height / 2];
+  globe.front.scale(r).translate(center).rotate([lambda, phi, 0]);
+  globe.back.scale(r).translate(center).rotate([lambda + 180, -phi, 0]);
+  globe.path     = d3.geoPath(globe.front, globe.ctx);
+  globe.backPath = d3.geoPath(globe.back, globe.ctx);
+}
+
+/* true se [lon, lat] esta no hemisferio voltado para a tela */
+function globeVisible(lon, lat) {
+  return d3.geoDistance([lon, lat], [-globe.rotation[0], -globe.rotation[1]]) < Math.PI / 2;
+}
+
+function bindGlobeInteraction() {
+  const c = globe.canvas;
+  const touch = () => { globe.lastInteraction = performance.now(); };
+
+  c.addEventListener('pointerdown', e => {
+    globe.dragging = true;
+    globe.tween = null;
+    globe.lastPointer = [e.clientX, e.clientY];
+    c.setPointerCapture(e.pointerId);
+    globe.tooltip.style.opacity = '0';
+    touch();
+  });
+  c.addEventListener('pointermove', e => {
+    if (globe.dragging) {
+      const k = 0.25 / globe.zoom;
+      globe.rotation[0] += (e.clientX - globe.lastPointer[0]) * k;
+      globe.rotation[1] = Math.max(-90, Math.min(90, globe.rotation[1] - (e.clientY - globe.lastPointer[1]) * k));
+      globe.lastPointer = [e.clientX, e.clientY];
+      touch();
+    } else {
+      updateGlobeTooltip(e);
+    }
+  });
+  const release = () => { globe.dragging = false; touch(); };
+  c.addEventListener('pointerup', release);
+  c.addEventListener('pointercancel', release);
+  c.addEventListener('pointerleave', () => { globe.tooltip.style.opacity = '0'; });
+
+  c.addEventListener('wheel', e => {
+    e.preventDefault();
+    globe.tween = null;
+    globe.zoom = Math.max(GLOBE_ZOOM_MIN, Math.min(GLOBE_ZOOM_MAX, globe.zoom * Math.exp(-e.deltaY * 0.0012)));
+    touch();
+  }, { passive: false });
+
+  c.addEventListener('dblclick', () => {
+    animateGlobeTo([globe.rotation[0], GLOBE_HOME[1]], 1, 900);
+    touch();
+  });
+}
+
+function updateGlobeTooltip(e) {
+  const rect = globe.canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  let hit = null, best = 9;
+  for (const m of globe.markers) {
+    if (!m.ip || !globeVisible(m.lon, m.lat)) continue;
+    const [x, y] = globe.front([m.lon, m.lat]);
+    const d = Math.hypot(x - mx, y - my);
+    if (d < best) { best = d; hit = { m, x, y }; }
+  }
+  if (!hit) { globe.tooltip.style.opacity = '0'; return; }
+  const loc = hit.m.location ? ` · ${hit.m.location}` : '';
+  globe.tooltip.textContent = `${hit.m.ip}${loc}`;
+  globe.tooltip.style.left = `${hit.x}px`;
+  globe.tooltip.style.top  = `${hit.y}px`;
+  globe.tooltip.style.opacity = '1';
+}
+
+function addGlobeMarker(lat, lon, meta) {
+  if (!globe.canvas) return;
+  const sev = meta.severity || 'high';
+  const color = sev === 'high' ? '#ff4d6d' : sev === 'medium' ? '#ffcc66' : '#66d9ff';
+  const now = performance.now();
+  globe.markers.push({ lat, lon, color, ip: meta.ip, location: meta.location, born: now, expires: now + MARKER_LIFETIME_MS });
+}
+
+function addGlobeArc(fromLat, fromLon, toLat, toLon, severity) {
+  if (!globe.canvas) return;
+  const color = severity === 'high' ? '#ff5577' : severity === 'medium' ? '#ffd27a' : '#8ee7ff';
+  globe.arcs.push({
+    interp: d3.geoInterpolate([fromLon, fromLat], [toLon, toLat]),
+    dist: d3.geoDistance([fromLon, fromLat], [toLon, toLat]),
+    color, born: performance.now(),
+  });
+}
+
+/* Interpola rotacao (caminho mais curto em longitude) e zoom */
+function animateGlobeTo(rotation, zoom, ms) {
+  const from = [...globe.rotation];
+  let dLon = ((rotation[0] - from[0]) % 360 + 540) % 360 - 180;
+  globe.tween = {
+    from, fromZoom: globe.zoom,
+    to: [from[0] + dLon, rotation[1]], toZoom: zoom,
+    start: performance.now(), ms,
+  };
+}
+
+function focusMapOn(lat, lon, holdMs = 4000) {
+  if (!globe.canvas) return;
+  animateGlobeTo([-lon, -lat], GLOBE_FOCUS_ZOOM, 1200);
+  if (globe.focusTimer) clearTimeout(globe.focusTimer);
+  globe.focusTimer = setTimeout(() => {
+    globe.focusTimer = null;
+    animateGlobeTo([globe.rotation[0], GLOBE_HOME[1]], 1, 1800);
+  }, holdMs);
+}
+
+function globeFrame(now) {
+  requestAnimationFrame(globeFrame);
+  const dt = globe.lastFrame ? Math.min(now - globe.lastFrame, 100) : 16;
+  globe.lastFrame = now;
+  /* Nao desenha com o dashboard oculto ou a aba em segundo plano */
+  if (document.hidden || !globe.canvas.offsetParent) return;
+  if (!globe.width) resizeGlobe();
+  if (!globe.width) return;
+
+  if (globe.tween) {
+    const t = Math.min(1, (now - globe.tween.start) / globe.tween.ms);
+    const e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    const { from, to } = globe.tween;
+    globe.rotation = [from[0] + (to[0] - from[0]) * e, from[1] + (to[1] - from[1]) * e];
+    globe.zoom = globe.tween.fromZoom + (globe.tween.toZoom - globe.tween.fromZoom) * e;
+    if (t >= 1) globe.tween = null;
+  } else if (!globe.dragging && !globe.focusTimer && now - globe.lastInteraction > GLOBE_IDLE_MS) {
+    globe.rotation[0] += GLOBE_SPIN_DEG_S * dt / 1000;
+  }
+
+  globe.markers = globe.markers.filter(m => m.expires > now);
+  globe.arcs    = globe.arcs.filter(a => now - a.born < GLOBE_ARC_MS);
+
+  syncProjections();
+  drawGlobe(now);
+}
+
+function drawGlobe(now) {
+  const { ctx, width: w, height: h, colors: c } = globe;
+  const cx = w / 2, cy = h / 2, r = globeRadius();
+  ctx.clearRect(0, 0, w, h);
+
+  /* Halo externo */
+  const halo = ctx.createRadialGradient(cx, cy, r * 0.92, cx, cy, r * 1.22);
+  halo.addColorStop(0, withAlpha(c.neon, 0.16));
+  halo.addColorStop(1, withAlpha(c.neon, 0));
+  ctx.fillStyle = halo;
+  ctx.beginPath(); ctx.arc(cx, cy, r * 1.22, 0, Math.PI * 2); ctx.fill();
+
+  /* Corpo da esfera */
+  const body = ctx.createRadialGradient(cx - r * 0.35, cy - r * 0.4, r * 0.05, cx, cy, r);
+  body.addColorStop(0, withAlpha(c.cyan, 0.10));
+  body.addColorStop(1, withAlpha(c.neon, 0.02));
+  ctx.fillStyle = body;
+  ctx.beginPath(); globe.path(globe.sphere); ctx.fill();
+
+  /* Hemisferio de tras, translucido */
+  ctx.lineWidth = 0.5;
+  ctx.strokeStyle = withAlpha(c.neon, 0.05);
+  ctx.beginPath(); globe.backPath(globe.graticule); ctx.stroke();
+  if (globe.land) {
+    ctx.strokeStyle = withAlpha(c.neon, 0.10);
+    ctx.beginPath(); globe.backPath(globe.land); ctx.stroke();
+  }
+
+  /* Grade de latitude/longitude */
+  ctx.strokeStyle = withAlpha(c.neon, 0.16);
+  ctx.lineWidth = 0.6;
+  ctx.beginPath(); globe.path(globe.graticule); ctx.stroke();
+
+  /* Continentes */
+  if (globe.land) {
+    ctx.fillStyle = withAlpha(c.neon, 0.13);
+    ctx.beginPath(); globe.path(globe.land); ctx.fill();
+    ctx.save();
+    ctx.shadowColor = withAlpha(c.neon, 0.7);
+    ctx.shadowBlur = 6;
+    ctx.strokeStyle = withAlpha(c.neon2, 0.6);
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /* Linhas de varredura + faixa de scan, recortadas na esfera */
+  ctx.save();
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.clip();
+  ctx.fillStyle = withAlpha(c.neon, 0.035);
+  for (let y = cy - r; y < cy + r; y += 3) ctx.fillRect(cx - r, y, r * 2, 1);
+  const bandY = cy - r + ((now / 4000) % 1) * r * 2;
+  const band = ctx.createLinearGradient(0, bandY - 24, 0, bandY + 24);
+  band.addColorStop(0, withAlpha(c.neon, 0));
+  band.addColorStop(0.5, withAlpha(c.neon, 0.08));
+  band.addColorStop(1, withAlpha(c.neon, 0));
+  ctx.fillStyle = band;
+  ctx.fillRect(cx - r, bandY - 24, r * 2, 48);
+  ctx.restore();
+
+  /* Borda (efeito fresnel) */
+  const rim = ctx.createRadialGradient(cx, cy, r * 0.78, cx, cy, r);
+  rim.addColorStop(0, withAlpha(c.cyan, 0));
+  rim.addColorStop(1, withAlpha(c.cyan, 0.16));
+  ctx.fillStyle = rim;
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = withAlpha(c.neon, 0.45);
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+
+  drawGlobeArcs(now, cx, cy, r);
+  drawGlobeMarkers(now);
+}
+
+/* Arcos elevados de grande circulo, origem -> defensor */
+function drawGlobeArcs(now, cx, cy, r) {
+  const { ctx } = globe;
+  const center = [-globe.rotation[0], -globe.rotation[1]];
+  for (const a of globe.arcs) {
+    const age = now - a.born;
+    const grow = Math.min(1, age / 1000);
+    const alpha = 0.85 * (1 - age / GLOBE_ARC_MS);
+    const lift = 0.05 + a.dist * 0.12;
+    const steps = 48;
+    ctx.strokeStyle = a.color;
+    ctx.globalAlpha = alpha;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    let pen = false, head = null;
+    for (let i = 0; i <= steps * grow; i++) {
+      const t = i / steps;
+      const p = a.interp(t);
+      const k = 1 + lift * Math.sin(Math.PI * t);
+      const [x, y] = globe.front(p);
+      const px = cx + (x - cx) * k, py = cy + (y - cy) * k;
+      /* Visivel se esta na frente ou "sobe" alem da silhueta */
+      const visible = d3.geoDistance(p, center) < Math.PI / 2 || Math.hypot(px - cx, py - cy) > r;
+      if (visible) { pen ? ctx.lineTo(px, py) : ctx.moveTo(px, py); pen = true; head = [px, py]; }
+      else pen = false;
+    }
+    ctx.stroke();
+    if (head && grow < 1) {
+      ctx.fillStyle = a.color;
+      ctx.beginPath(); ctx.arc(head[0], head[1], 2.2, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawGlobeMarkers(now) {
+  const { ctx } = globe;
+  for (const m of globe.markers) {
+    if (!globeVisible(m.lon, m.lat)) continue;
+    const [x, y] = globe.front([m.lon, m.lat]);
+    const phase = ((now - m.born) % GLOBE_PULSE_MS) / GLOBE_PULSE_MS;
+    ctx.strokeStyle = m.color;
+    ctx.globalAlpha = 0.8 * (1 - phase);
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(x, y, 4 + phase * 14, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = m.color;
+    ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* Redesenha no globo um alerta que ja tinha expirado (marcador removido apos MARKER_LIFETIME_MS) */
 function reshowAlertOnMap(payload) {
   const lat = payload.lat, lon = payload.lon;
   if (lat == null || lon == null) return;
@@ -137,43 +396,13 @@ function reshowAlertOnMap(payload) {
   setTimeout(() => {
     const defLat = state.defender.lat, defLon = state.defender.lon;
     const sev = 'high';
-    addLeafletMarker(lat, lon, { ip: payload.ip, location: payload.location, severity: sev });
-    addLeafletLine(lat, lon, defLat, defLon, sev);
+    addGlobeMarker(lat, lon, { ip: payload.ip, location: payload.location, severity: sev });
+    addGlobeArc(lat, lon, defLat, defLon, sev);
     focusMapOn(lat, lon, 4000);
     const type = attackTypeFromPayload(payload);
     const label = `${payload.location || payload.country || 'Desconhecido'} · ${type}`;
     showMapLabel(label, 5000);
   }, 120);
-}
-
-function addLeafletLine(fromLat, fromLon, toLat, toLon, severity) {
-  if (!leafletMap) return;
-  const color = severity === 'high' ? '#ff5577' : severity === 'medium' ? '#ffd27a' : '#8ee7ff';
-
-  const line = L.polyline([[fromLat, fromLon], [toLat, toLon]], {
-    color, weight: 1.4, opacity: 0.7, interactive: false,
-  }).addTo(leafletMap);
-
-  let startTs = null;
-  const fade = (ts) => {
-    if (!startTs) startTs = ts;
-    const elapsed = ts - startTs;
-    const op = Math.max(0, 0.7 * (1 - elapsed / 6000));
-    if (!leafletMap || !leafletMap.hasLayer(line)) return;
-    line.setStyle({ opacity: op });
-    if (elapsed < 6000) requestAnimationFrame(fade);
-    else if (leafletMap && leafletMap.hasLayer(line)) leafletMap.removeLayer(line);
-  };
-  requestAnimationFrame(fade);
-}
-
-function focusMapOn(lat, lon, holdMs = 4000) {
-  if (!leafletMap) return;
-  leafletMap.flyTo([lat, lon], 10, { duration: 1.2, easeLinearity: 0.4 });
-  if (mapZoomTimer) clearTimeout(mapZoomTimer);
-  mapZoomTimer = setTimeout(() => {
-    if (leafletMap) leafletMap.flyTo([20, 0], 2, { duration: 1.8, easeLinearity: 0.4 });
-  }, holdMs);
 }
 
 function showMapLabel(text, ms = 5000) {
@@ -199,8 +428,8 @@ function showSection(name) {
   if (menuItem) menuItem.classList.add('active');
 
   /* Post-switch actions */
-  if (name === 'dash' && leafletMap) {
-    setTimeout(() => leafletMap.invalidateSize(), 50);
+  if (name === 'dash' && globe.canvas) {
+    setTimeout(resizeGlobe, 50);
   }
   if (name === 'ataques') refreshAttacksPage();
   if (name === 'firewall') refreshFirewallPage();
@@ -885,13 +1114,13 @@ function handleNewAlert(payload) {
   /* Prepend to feeds */
   prependAlertCard(payload);
 
-  /* Map: add marker + line */
+  /* Globo: marcador + arco */
   const lat = payload.lat, lon = payload.lon;
   if (lat != null && lon != null) {
     const defLat = state.defender.lat, defLon = state.defender.lon;
     const sev = 'high';
-    addLeafletMarker(lat, lon, { ip, location: payload.location, severity: sev });
-    addLeafletLine(lat, lon, defLat, defLon, sev);
+    addGlobeMarker(lat, lon, { ip, location: payload.location, severity: sev });
+    addGlobeArc(lat, lon, defLat, defLon, sev);
     focusMapOn(lat, lon, 4000);
     const label = `${payload.location || payload.country || 'Desconhecido'} · ${type}`;
     showMapLabel(label, 5000);
@@ -1179,7 +1408,7 @@ document.addEventListener('DOMContentLoaded', () => {
   updateUptime();
   setInterval(updateUptime, 1000);
 
-  initLeafletMap();
+  initGlobe();
   ensureChart();
   initHackerBinary();
   initEcg();
