@@ -2,6 +2,11 @@ import ipaddress
 import time
 
 import psutil
+from dotenv import load_dotenv
+
+# Precisa rodar antes dos imports abaixo: alerting.py le o
+# DATASENTINEL_INGEST_TOKEN (e ai_detector.py o DATA_DIR) no momento do import.
+load_dotenv()
 
 from alerting import LOCAL_IPS, get_geo, push_alert, register_incident, suppressed_suffix
 from detector import classify_attack, detect_suspicious, record_connection
