@@ -111,4 +111,4 @@ def ai_detect(features):
         return False
 
     prediction = _model.predict([features])
-    return prediction[0] == -1
+    return bool(prediction[0] == -1)

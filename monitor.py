@@ -20,8 +20,6 @@ ATTACK_TYPE_LABELS = {
 # padrao de ataque, e o IsolationForest sempre marca uma fracao como outlier.
 AI_MIN_CONNECTIONS = 5
 
-_seen_connections = set()  # (porta_local, ip_remoto, porta_remota) ja contadas
-
 
 def _is_local(ip):
     if ip in LOCAL_IPS:
@@ -35,97 +33,112 @@ def _is_local(ip):
     return addr.is_loopback or addr.is_unspecified
 
 
-while True:
+def new_inbound_connections(connections, seen):
+    """Filtra as conexoes de um ciclo e devolve (novas, ativas).
 
-    connections = psutil.net_connections()
-
-    # So conexoes de ENTRADA (alguem conectando numa porta que esta maquina
-    # escuta) podem ser ataque. Conexoes de saida (navegador, updates...) usam
-    # uma porta local efemera diferente por conexao e geravam falso "port scan".
+    So conexoes de ENTRADA (alguem conectando numa porta que esta maquina
+    escuta) podem ser ataque. Conexoes de saida (navegador, updates...) usam
+    uma porta local efemera diferente por conexao e geravam falso "port scan".
+    Cada conexao so conta uma vez, nao a cada ciclo em que continua aberta:
+    `seen` sao as chaves (porta_local, ip_remoto, porta_remota) do ciclo
+    anterior, e `ativas` deve ser passado como `seen` no proximo ciclo."""
     listening_ports = {
         c.laddr.port for c in connections
         if c.status == psutil.CONN_LISTEN and c.laddr
     }
-    active_connections = set()
+    new = []
+    active = set()
 
     for conn in connections:
+        if not (conn.raddr and conn.laddr and conn.laddr.port in listening_ports):
+            continue
 
-        try:
+        ip = conn.raddr.ip
+        if _is_local(ip):
+            continue
 
-            if conn.raddr and conn.laddr and conn.laddr.port in listening_ports:
+        key = (conn.laddr.port, ip, conn.raddr.port)
+        active.add(key)
+        if key not in seen:
+            new.append((ip, conn.laddr.port))
 
-                ip = conn.raddr.ip
+    return new, active
 
-                if _is_local(ip):
-                    continue
 
-                # Cada conexao so conta uma vez, nao a cada ciclo em que
-                # continua aberta.
-                key = (conn.laddr.port, ip, conn.raddr.port)
-                active_connections.add(key)
-                if key in _seen_connections:
-                    continue
+def handle_connection(ip, local_port):
+    conn_count, distinct_ports = record_connection(ip, local_port)
 
-                local_port = conn.laddr.port
-                conn_count, distinct_ports = record_connection(ip, local_port)
+    suspicious = detect_suspicious(ip)
+    ai_result = (
+        ai_detect([conn_count, distinct_ports])
+        and conn_count >= AI_MIN_CONNECTIONS
+    )
 
-                suspicious = detect_suspicious(ip)
-                ai_result = (
-                    ai_detect([conn_count, distinct_ports])
-                    and conn_count >= AI_MIN_CONNECTIONS
-                )
+    if not (suspicious or ai_result):
+        return
 
-                if suspicious or ai_result:
+    attack_type = classify_attack(conn_count, distinct_ports)
 
-                    attack_type = classify_attack(conn_count, distinct_ports)
+    block_ip(ip)  # bloqueio imediato, independente de dedup
 
-                    block_ip(ip)  # bloqueio imediato, independente de dedup
+    should_alert, suppressed = register_incident(ip, attack_type)
+    if not should_alert:
+        return
 
-                    should_alert, suppressed = register_incident(ip, attack_type)
-                    if not should_alert:
-                        continue
+    geo = get_geo(ip)
+    type_label = ATTACK_TYPE_LABELS[attack_type]
 
-                    geo = get_geo(ip)
-                    type_label = ATTACK_TYPE_LABELS[attack_type]
+    message = (
+        f"ATAQUE detectado ({type_label}) de {ip} | "
+        f"Localizacao: {geo['location']}"
+        f"{suppressed_suffix(suppressed)}"
+    )
 
-                    message = (
-                        f"ATAQUE detectado ({type_label}) de {ip} | "
-                        f"Localizacao: {geo['location']}"
-                        f"{suppressed_suffix(suppressed)}"
-                    )
+    save_log(message)
 
-                    save_log(message)
+    send_email(
+        "ALERTA DataSentinel",
+        message,
+    )
 
-                    send_email(
-                        "ALERTA DataSentinel",
-                        message,
-                    )
+    reasons = []
+    if suspicious:
+        reasons.append("threshold")
+    if ai_result:
+        reasons.append("ai_anomaly")
 
-                    reasons = []
-                    if suspicious:
-                        reasons.append("threshold")
-                    if ai_result:
-                        reasons.append("ai_anomaly")
+    payload = {
+        "message": message,
+        "ip": ip,
+        "location": geo["location"],
+        "lat": geo["lat"],
+        "lon": geo["lon"],
+        "country": geo["country"],
+        "city": geo["city"],
+        "countryCode": geo["countryCode"],
+        "type": attack_type,
+        "reason": "+".join(reasons) if reasons else "unknown",
+        "timestamp": time.time(),
+    }
 
-                    payload = {
-                        "message": message,
-                        "ip": ip,
-                        "location": geo["location"],
-                        "lat": geo["lat"],
-                        "lon": geo["lon"],
-                        "country": geo["country"],
-                        "city": geo["city"],
-                        "countryCode": geo["countryCode"],
-                        "type": attack_type,
-                        "reason": "+".join(reasons) if reasons else "unknown",
-                        "timestamp": time.time(),
-                    }
+    push_alert(payload)
 
-                    push_alert(payload)
 
-        except Exception:
-            pass
+def main():
+    seen = set()
 
-    _seen_connections = active_connections
+    while True:
 
-    time.sleep(3)
+        new, seen = new_inbound_connections(psutil.net_connections(), seen)
+
+        for ip, local_port in new:
+            try:
+                handle_connection(ip, local_port)
+            except Exception:
+                pass
+
+        time.sleep(3)
+
+
+if __name__ == "__main__":
+    main()
