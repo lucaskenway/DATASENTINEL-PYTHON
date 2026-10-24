@@ -275,7 +275,7 @@ def _net_stats():
 
 _ALLOWED_ALERT_FIELDS = {
     "ip", "country", "region", "city", "location", "type",
-    "reason", "message", "countryCode",
+    "reason", "message", "countryCode", "isp", "org",
 }
 _MAX_STR_LEN = 200
 _CONTROL_CHARS = re.compile(r"[\r\n\x00-\x1f]")

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'datasentinel-v3';
+const CACHE_NAME = 'datasentinel-v4';
 const ASSETS = [
   '/script.js',
   '/style.css',

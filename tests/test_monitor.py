@@ -105,8 +105,8 @@ def handled(monkeypatch):
     monkeypatch.setattr(monitor, "send_email", lambda *a: None)
     monkeypatch.setattr(monitor, "register_incident", lambda ip, t: (True, 0))
     monkeypatch.setattr(monitor, "get_geo", lambda ip: {
-        "location": "Teste", "lat": None, "lon": None,
-        "country": None, "city": None, "countryCode": None,
+        "location": "Teste", "lat": None, "lon": None, "country": None,
+        "region": None, "city": None, "countryCode": None, "isp": None, "org": None,
     })
     return calls
 

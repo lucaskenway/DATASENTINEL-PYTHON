@@ -143,6 +143,7 @@ function bindGlobeInteraction() {
     globe.dragging = true;
     globe.tween = null;
     globe.lastPointer = [e.clientX, e.clientY];
+    globe.downPointer = [e.clientX, e.clientY];
     c.setPointerCapture(e.pointerId);
     globe.tooltip.style.opacity = '0';
     touch();
@@ -159,7 +160,15 @@ function bindGlobeInteraction() {
     }
   });
   const release = () => { globe.dragging = false; touch(); };
-  c.addEventListener('pointerup', release);
+  c.addEventListener('pointerup', e => {
+    /* Clique (sem arrastar) em cima de um marcador abre os detalhes da origem */
+    const [dx, dy] = globe.downPointer || [e.clientX, e.clientY];
+    if (Math.hypot(e.clientX - dx, e.clientY - dy) < 5) {
+      const hit = findGlobeMarkerAt(e, 14);
+      if (hit && hit.m.alert) showAttackerCard(hit.m.alert);
+    }
+    release();
+  });
   c.addEventListener('pointercancel', release);
   c.addEventListener('pointerleave', () => { globe.tooltip.style.opacity = '0'; });
 
@@ -174,21 +183,30 @@ function bindGlobeInteraction() {
     animateGlobeTo([globe.rotation[0], GLOBE_HOME[1]], 1, 900);
     touch();
   });
+
+  document.getElementById('ac-close')?.addEventListener('click', hideAttackerCard);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') hideAttackerCard(); });
 }
 
-function updateGlobeTooltip(e) {
+function findGlobeMarkerAt(e, radius = 9) {
   const rect = globe.canvas.getBoundingClientRect();
   const mx = e.clientX - rect.left, my = e.clientY - rect.top;
-  let hit = null, best = 9;
+  let hit = null, best = radius;
   for (const m of globe.markers) {
     if (!m.ip || !globeVisible(m.lon, m.lat)) continue;
     const [x, y] = globe.front([m.lon, m.lat]);
     const d = Math.hypot(x - mx, y - my);
     if (d < best) { best = d; hit = { m, x, y }; }
   }
+  return hit;
+}
+
+function updateGlobeTooltip(e) {
+  const hit = findGlobeMarkerAt(e);
+  globe.canvas.style.cursor = hit && hit.m.alert ? 'pointer' : '';
   if (!hit) { globe.tooltip.style.opacity = '0'; return; }
-  const loc = hit.m.location ? ` · ${hit.m.location}` : '';
-  globe.tooltip.textContent = `${hit.m.ip}${loc}`;
+  const place = hit.m.alert ? placeName(hit.m.alert) : hit.m.location;
+  globe.tooltip.textContent = `${hit.m.ip}${place ? ` · ${place}` : ''}`;
   globe.tooltip.style.left = `${hit.x}px`;
   globe.tooltip.style.top  = `${hit.y}px`;
   globe.tooltip.style.opacity = '1';
@@ -199,7 +217,58 @@ function addGlobeMarker(lat, lon, meta) {
   const sev = meta.severity || 'high';
   const color = sev === 'high' ? '#ff4d6d' : sev === 'medium' ? '#ffcc66' : '#66d9ff';
   const now = performance.now();
-  globe.markers.push({ lat, lon, color, ip: meta.ip, location: meta.location, born: now, expires: now + MARKER_LIFETIME_MS });
+  globe.markers.push({ lat, lon, color, ip: meta.ip, location: meta.location, alert: meta.alert, born: now, expires: now + MARKER_LIFETIME_MS });
+}
+
+/* "Cidade, Regiao, Pais" com o que o alerta tiver */
+function placeName(p) {
+  const parts = [p.city, p.region, p.country].filter(Boolean);
+  const unique = parts.filter((v, i) => parts.indexOf(v) === i);
+  return unique.length ? unique.join(', ') : (p.location || 'Desconhecido');
+}
+
+/* Cartao com a origem APROXIMADA do ataque (geolocalizacao por IP indica a
+   cidade/provedor, nunca o endereco de quem esta atras do IP). */
+function showAttackerCard(p) {
+  const card = document.getElementById('attackerCard');
+  if (!card || p.lat == null || p.lon == null) return;
+
+  document.getElementById('ac-city').textContent = p.city || p.location || 'Local desconhecido';
+
+  const when = p.timestamp ? new Date(p.timestamp * 1000).toLocaleString('pt-BR') : '—';
+  const rows = [
+    ['IP', p.ip],
+    ['Local', placeName(p)],
+    ['Provedor', p.isp],
+    ['Organização', p.org && p.org !== p.isp ? p.org : null],
+    ['Ataque', attackTypeFromPayload(p)],
+    ['Horário', when],
+    ['Coord. aprox.', `${(+p.lat).toFixed(3)}, ${(+p.lon).toFixed(3)}`],
+  ];
+  const dl = document.getElementById('ac-rows');
+  dl.replaceChildren();
+  for (const [k, v] of rows) {
+    if (!v) continue;
+    const dt = document.createElement('dt'); dt.textContent = k;
+    const dd = document.createElement('dd'); dd.textContent = v;
+    dl.append(dt, dd);
+  }
+
+  const lat = +p.lat, lon = +p.lon, d = 0.06;
+  const bbox = [lon - d, lat - d, lon + d, lat + d].map(n => n.toFixed(4)).join(',');
+  document.getElementById('ac-frame').src =
+    `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat},${lon}`;
+  document.getElementById('ac-map').href =
+    `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=12/${lat}/${lon}`;
+
+  card.hidden = false;
+}
+
+function hideAttackerCard() {
+  const card = document.getElementById('attackerCard');
+  if (!card) return;
+  card.hidden = true;
+  document.getElementById('ac-frame').src = 'about:blank';
 }
 
 function addGlobeArc(fromLat, fromLon, toLat, toLon, severity) {
@@ -396,12 +465,12 @@ function reshowAlertOnMap(payload) {
   setTimeout(() => {
     const defLat = state.defender.lat, defLon = state.defender.lon;
     const sev = 'high';
-    addGlobeMarker(lat, lon, { ip: payload.ip, location: payload.location, severity: sev });
+    addGlobeMarker(lat, lon, { ip: payload.ip, location: payload.location, severity: sev, alert: payload });
     addGlobeArc(lat, lon, defLat, defLon, sev);
     focusMapOn(lat, lon, 4000);
     const type = attackTypeFromPayload(payload);
-    const label = `${payload.location || payload.country || 'Desconhecido'} · ${type}`;
-    showMapLabel(label, 5000);
+    showMapLabel(`${placeName(payload)} · ${type}`, 5000);
+    showAttackerCard(payload);
   }, 120);
 }
 
@@ -1119,11 +1188,10 @@ function handleNewAlert(payload) {
   if (lat != null && lon != null) {
     const defLat = state.defender.lat, defLon = state.defender.lon;
     const sev = 'high';
-    addGlobeMarker(lat, lon, { ip, location: payload.location, severity: sev });
+    addGlobeMarker(lat, lon, { ip, location: payload.location, severity: sev, alert: payload });
     addGlobeArc(lat, lon, defLat, defLon, sev);
     focusMapOn(lat, lon, 4000);
-    const label = `${payload.location || payload.country || 'Desconhecido'} · ${type}`;
-    showMapLabel(label, 5000);
+    showMapLabel(`${placeName(payload)} · ${type}`, 5000);
   }
 
   /* Atualiza donut e top IPs no dashboard */

@@ -337,6 +337,43 @@ body {
   pointer-events: none; white-space: nowrap; transition: opacity 0.4s;
 }
 
+/* Cartao com a origem do ataque (clique no marcador do globo) */
+.attacker-card {
+  position: absolute; top: 34px; left: 10px; z-index: 900;
+  width: min(270px, calc(100% - 20px)); max-height: calc(100% - 44px); overflow-y: auto;
+  background: rgba(3,10,14,0.95); border: 1px solid rgba(255,77,109,0.45);
+  border-radius: var(--radius-sm); padding: 10px 12px 12px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.7), 0 0 18px rgba(255,77,109,0.12);
+  animation: attackerIn 0.2s ease-out;
+}
+.attacker-card[hidden] { display: none; }
+@keyframes attackerIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.attacker-close {
+  position: absolute; top: 4px; right: 6px;
+  background: none; border: 0; color: var(--muted); font-size: 18px; line-height: 1;
+  cursor: pointer; padding: 2px 4px;
+}
+.attacker-close:hover { color: var(--danger2); }
+.attacker-kicker { font-size: 8.5px; letter-spacing: 0.14em; color: var(--danger2); }
+.attacker-city { font-family: var(--head); font-size: 16px; color: #fff; margin: 2px 0 8px; padding-right: 16px; }
+.attacker-rows {
+  display: grid; grid-template-columns: auto 1fr; gap: 3px 10px;
+  font-size: 10px; margin-bottom: 9px;
+}
+.attacker-rows dt { color: var(--muted); }
+.attacker-rows dd { color: var(--neon2); overflow-wrap: anywhere; }
+.attacker-frame {
+  display: block; width: 100%; height: 150px; border: 1px solid var(--border2);
+  border-radius: 4px; background: var(--bg2); margin-bottom: 8px;
+}
+.attacker-map-btn {
+  display: block; text-align: center; font-size: 9.5px; letter-spacing: 0.08em;
+  color: var(--neon); border: 1px solid var(--border2); border-radius: 4px;
+  padding: 5px 8px; text-decoration: none; background: rgba(77,255,154,0.05);
+}
+.attacker-map-btn:hover { background: rgba(77,255,154,0.12); }
+.attacker-note { font-size: 9px; color: var(--muted); margin-top: 7px; line-height: 1.4; }
+
 .region-select {
   background: rgba(77,255,154,0.05); border: 1px solid var(--border2);
   color: var(--neon2); font-size: 9.5px; padding: 3px 7px;
