@@ -4,6 +4,19 @@ import shutil
 import subprocess
 
 blocked_ips = set()
+_failed_ips = set()  # falhas ja reportadas, para nao repetir o erro a cada conexao
+
+
+def _decode_output(raw):
+    # O netsh pode responder em UTF-8 ou na code page do console (OEM),
+    # dependendo da configuracao do Windows; text=True usaria cp1252 e
+    # quebraria os acentos ("operaÃ§Ã£o").
+    for encoding in ("utf-8", "oem" if os.name == "nt" else "latin-1"):
+        try:
+            return raw.decode(encoding).strip()
+        except (UnicodeDecodeError, LookupError):
+            continue
+    return raw.decode("utf-8", errors="replace").strip()
 
 
 def _run_firewall_command(command):
@@ -11,17 +24,22 @@ def _run_firewall_command(command):
         command,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        text=True,
         check=False,
         timeout=10,
     )
     if completed.returncode != 0:
-        raise RuntimeError(completed.stderr.strip() or completed.stdout.strip() or "firewall command failed")
+        raise RuntimeError(
+            _decode_output(completed.stderr)
+            or _decode_output(completed.stdout)
+            or "firewall command failed"
+        )
 
 
 def block_ip(ip):
     if ip in blocked_ips:
         return True
+    if ip in _failed_ips:
+        return False
 
     try:
         ipaddress.ip_address(ip)
@@ -56,5 +74,6 @@ def block_ip(ip):
         return True
 
     except Exception as e:
-        print(f"Erro ao bloquear IP: {e}")
+        _failed_ips.add(ip)
+        print(f"Erro ao bloquear IP {ip}: {e}")
         return False

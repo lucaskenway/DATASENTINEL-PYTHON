@@ -17,7 +17,7 @@ MODEL_FILE = os.path.join(DATA_DIR, "ai_model.joblib")
 MIN_SAMPLES = 30        # amostras reais minimas antes de confiar no modelo
 RETRAIN_EVERY = 50      # retreina a cada N amostras novas
 MAX_DATASET_ROWS = 5000  # janela de treino (linhas mais recentes)
-CONTAMINATION = 0.05
+CONTAMINATION = 0.01
 
 _model = None
 _samples_since_train = 0
