@@ -249,12 +249,17 @@
               </div>
               <aside class="attacker-card" id="attackerCard" aria-label="Origem do ataque" hidden>
                 <button class="attacker-close" id="ac-close" type="button" aria-label="Fechar">×</button>
-                <div class="attacker-kicker mono">ORIGEM DO ATAQUE</div>
+                <div class="attacker-kicker mono" id="ac-kicker">ORIGEM DO ATAQUE</div>
                 <h3 class="attacker-city" id="ac-city"></h3>
-                <dl class="attacker-rows mono" id="ac-rows"></dl>
-                <iframe class="attacker-frame" id="ac-frame" title="Mapa da região de origem" loading="lazy" referrerpolicy="no-referrer"></iframe>
-                <a class="attacker-map-btn mono" id="ac-map" target="_blank" rel="noopener noreferrer">VER REGIÃO NO MAPA ↗</a>
-                <p class="attacker-note">Localização aproximada pelo IP (cidade/provedor). Não é o endereço do atacante.</p>
+                <div class="attacker-body">
+                  <dl class="attacker-rows mono" id="ac-rows"></dl>
+                  <iframe class="attacker-frame" id="ac-frame" title="Mapa da região de origem" loading="lazy" referrerpolicy="no-referrer"></iframe>
+                  <p class="attacker-map-empty mono" id="ac-map-empty" hidden>Mapa indisponível: este evento não informa coordenadas.</p>
+                </div>
+                <div class="attacker-footer">
+                  <button class="attacker-map-btn mono" id="ac-map" type="button">VER REGIÃO NO MAPA</button>
+                  <p class="attacker-note">Localização aproximada pelo IP (cidade/provedor). Não é o endereço do atacante.</p>
+                </div>
               </aside>
             </div>
             <div class="attack-log">

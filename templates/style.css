@@ -206,7 +206,9 @@ body {
 
 /* ── MAIN ── */
 .main {
-  flex: 1; overflow-y: auto; overflow-x: hidden;
+  /* min-width: 0 deixa o item flex encolher ate a tela; sem isso ele cresce
+     ate o conteudo mais largo e o overflow-x: hidden corta a direita */
+  flex: 1; min-width: 0; overflow-y: auto; overflow-x: hidden;
   padding: 12px 14px;
   background: transparent;
   display: flex; flex-direction: column;
@@ -277,7 +279,7 @@ body {
 /* ══════════════════════════════════════════════
    DASHBOARD CONTENT GRID
 ══════════════════════════════════════════════ */
-.content-grid { display: grid; grid-template-columns: 1fr 260px; gap: 10px; }
+.content-grid { display: grid; grid-template-columns: minmax(0,1fr) 260px; gap: 10px; }
 
 /* MAP */
 .map-panel { position: relative; }
@@ -335,12 +337,16 @@ body {
   color: var(--neon); font-family: var(--mono); font-size: 9px;
   padding: 3px 10px; border-radius: 20px; letter-spacing: 0.1em;
   pointer-events: none; white-space: nowrap; transition: opacity 0.4s;
+  max-width: calc(100% - 20px); overflow: hidden; text-overflow: ellipsis;
 }
 
 /* Cartao com a origem do ataque (clique no marcador do globo) */
+/* Coluna flex: so o miolo (dados + mapa) rola; titulo e rodape com o botao
+   e o aviso ficam sempre visiveis, mesmo com o globo baixo. */
 .attacker-card {
   position: absolute; top: 34px; left: 10px; z-index: 900;
-  width: min(270px, calc(100% - 20px)); max-height: calc(100% - 44px); overflow-y: auto;
+  width: min(290px, calc(100% - 20px)); max-height: calc(100% - 44px); overflow: hidden;
+  display: flex; flex-direction: column;
   background: rgba(3,10,14,0.95); border: 1px solid rgba(255,77,109,0.45);
   border-radius: var(--radius-sm); padding: 10px 12px 12px;
   box-shadow: 0 4px 24px rgba(0,0,0,0.7), 0 0 18px rgba(255,77,109,0.12);
@@ -361,17 +367,30 @@ body {
   font-size: 10px; margin-bottom: 9px;
 }
 .attacker-rows dt { color: var(--muted); }
-.attacker-rows dd { color: var(--neon2); overflow-wrap: anywhere; }
+.attacker-rows dd { color: var(--neon2); overflow-wrap: anywhere; min-width: 0; }
+.attacker-rows dd.is-missing { color: var(--muted); font-style: italic; }
+.attacker-kicker, .attacker-city { flex-shrink: 0; }
+.attacker-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-right: 2px; }
+.attacker-footer { flex-shrink: 0; padding-top: 8px; border-top: 1px solid var(--border); }
 .attacker-frame {
-  display: block; width: 100%; height: 150px; border: 1px solid var(--border2);
-  border-radius: 4px; background: var(--bg2); margin-bottom: 8px;
+  display: block; width: 100%; height: 170px; border: 1px solid var(--border2);
+  border-radius: 4px; background: var(--bg2); margin-bottom: 2px;
+}
+/* display:block acima anula o atributo hidden; isto o restaura */
+.attacker-frame[hidden], .attacker-map-empty[hidden] { display: none; }
+.attacker-map-empty {
+  font-size: 9.5px; color: var(--muted); text-align: center; line-height: 1.4;
+  border: 1px dashed var(--border2); border-radius: 4px; padding: 14px 8px;
 }
 .attacker-map-btn {
   display: block; text-align: center; font-size: 9.5px; letter-spacing: 0.08em;
   color: var(--neon); border: 1px solid var(--border2); border-radius: 4px;
   padding: 5px 8px; text-decoration: none; background: rgba(77,255,154,0.05);
+  width: 100%; font-family: inherit; cursor: pointer;
 }
 .attacker-map-btn:hover { background: rgba(77,255,154,0.12); }
+.attacker-map-btn:disabled { color: var(--muted); cursor: not-allowed; background: transparent; }
+.attacker-map-btn:focus-visible { outline: 1px solid var(--neon); outline-offset: 2px; }
 .attacker-note { font-size: 9px; color: var(--muted); margin-top: 7px; line-height: 1.4; }
 
 .region-select {
@@ -395,7 +414,9 @@ body {
   border-bottom: 1px solid rgba(77,255,154,0.04);
   align-items: center; animation: rowSlide 0.25s ease; transition: background 0.15s;
 }
-.attack-row:hover { background: rgba(77,255,154,0.04); }
+.attack-row:hover { background: rgba(77,255,154,0.04); cursor: pointer; }
+.attack-row:focus-visible { outline: 1px solid var(--neon); outline-offset: -1px; }
+.attack-row.is-selected { background: rgba(77,255,154,0.08); box-shadow: inset 2px 0 0 var(--neon); }
 @keyframes rowSlide { from{transform:translateX(-8px);opacity:0} to{transform:none;opacity:1} }
 .attack-row .row-time { color: var(--muted); font-size: 9px; }
 .attack-row .row-desc { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
@@ -736,17 +757,21 @@ body {
 ::-webkit-scrollbar-thumb:hover { background: rgba(77,255,154,0.32); }
 
 /* ── RESPONSIVE ── */
+/* minmax(0,1fr) em vez de 1fr: com 1fr a coluna nunca encolhe abaixo do
+   conteudo (tabela de colunas fixas, textos grandes) e o .main, que tem
+   overflow-x: hidden, cortava a direita do painel em telas estreitas. */
 @media (max-width: 1350px) {
-  .content-grid { grid-template-columns: 1fr 240px; }
+  .content-grid { grid-template-columns: minmax(0,1fr) 240px; }
   .config-grid  { grid-template-columns: 1fr 1fr; }
   .config-status-panel { display: none; }
   .about-grid   { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 1100px) {
-  .content-grid { grid-template-columns: 1fr; }
+  .content-grid { grid-template-columns: minmax(0,1fr); }
   .right-col { flex-direction: row; }
-  .bottom-grid { grid-template-columns: 1fr; }
-  .cards { grid-template-columns: repeat(2,1fr); }
+  .right-col > .panel { flex: 1 1 0; min-width: 0; }
+  .bottom-grid { grid-template-columns: minmax(0,1fr); }
+  .cards { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .ataques-grid { grid-template-columns: 1fr; }
   .fw-grid { grid-template-columns: 1fr; }
   .about-grid { grid-template-columns: 1fr; }
@@ -759,7 +784,20 @@ body {
   .topbar-center, .topbar-hacker { display: none; }
   .topbar-brand { width: 52px; padding: 0 8px; }
   .brand-text { display: none; }
-  .cards { grid-template-columns: repeat(2,1fr); }
+  .cards { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .fw-kpi-row, .net-kpi-row { grid-template-columns: repeat(2,1fr); }
   .config-grid { grid-template-columns: 1fr; }
+  /* Tabela de eventos: colunas mantidas; rola na horizontal so dentro dela */
+  .attack-log { overflow-x: auto; }
+  .attack-log-header, .attack-log-body { min-width: 520px; }
+}
+@media (max-width: 600px) {
+  .cards { grid-template-columns: minmax(0,1fr); }
+  .right-col { flex-direction: column; }
+  /* Cartao abaixo do globo, para o globo continuar visivel ao girar */
+  .attacker-card {
+    position: relative; top: auto; left: auto; width: auto;
+    max-height: none; margin: 8px 10px;
+  }
+  .attacker-body { overflow: visible; }
 }

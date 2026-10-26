@@ -48,6 +48,9 @@ const GLOBE_ZOOM_MIN   = 0.8;
 const GLOBE_ZOOM_MAX   = 3;
 const GLOBE_FOCUS_ZOOM = 1.6;
 const GLOBE_ARC_MS     = 6000;
+const ATTACK_LEAD_MS   = 1000;       /* mostra a origem antes do ataque sair */
+const ATTACK_TRAVEL_MS = 2400;       /* tempo do ataque viajando ate o alvo */
+const ATTACK_HOLD_MS   = 2600;       /* tempo parado no alvo mostrando o impacto */
 const GLOBE_PULSE_MS   = 2200;
 
 const globe = {
@@ -57,7 +60,8 @@ const globe = {
   sphere: { type: 'Sphere' }, graticule: null, land: null,
   rotation: [...GLOBE_HOME], zoom: 1,
   dragging: false, lastPointer: null, lastInteraction: 0,
-  tween: null, focusTimer: null,
+  tween: null, focusTimer: null, followTimers: [],
+  hold: false, highlight: null, selected: null,
   markers: [], arcs: [],
   colors: null, lastFrame: 0,
 };
@@ -227,39 +231,102 @@ function placeName(p) {
   return unique.length ? unique.join(', ') : (p.location || 'Desconhecido');
 }
 
+/* Alvo do ataque: usa target_* do alerta; sem isso, cai no defensor padrao */
+function attackTarget(p) {
+  if (p.target_lat != null && p.target_lon != null) {
+    return { lat: p.target_lat, lon: p.target_lon, ip: p.target_ip || '', name: p.target_city || p.target_location || '' };
+  }
+  return { lat: state.defender.lat, lon: state.defender.lon, ip: p.target_ip || '', name: '' };
+}
+
+function targetLabel(p) {
+  const t = attackTarget(p);
+  return [t.name, t.ip && `(${t.ip})`].filter(Boolean).join(' ');
+}
+
+/* Coordenadas do evento, ou null se faltarem / forem invalidas.
+   Nunca inventa uma posicao: sem lat/lon validos, nao ha local no mapa. */
+function eventCoords(p) {
+  if (!p || p.lat == null || p.lon == null || p.lat === '' || p.lon === '') return null;
+  const lat = Number(p.lat), lon = Number(p.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
+  return { lat, lon };
+}
+
+/* Texto seguro para a interface: nada de "undefined", "null" ou "[object Object]" */
+function displayText(v) {
+  if (v == null) return '';
+  if (typeof v === 'string') return v.trim();
+  if (typeof v === 'number') return Number.isFinite(v) ? String(v) : '';
+  return '';
+}
+
+function isSimulatedEvent(p) {
+  return /^SIMULATED\b/i.test(displayText(p.message)) || p.reason === 'manual_test' || p.type === 'test_event';
+}
+
+const UNAVAILABLE = 'Indisponível';
+
 /* Cartao com a origem APROXIMADA do ataque (geolocalizacao por IP indica a
    cidade/provedor, nunca o endereco de quem esta atras do IP). */
 function showAttackerCard(p) {
   const card = document.getElementById('attackerCard');
-  if (!card || p.lat == null || p.lon == null) return;
+  if (!card || !p) return;
+  globe.selected = p;
+  const coords = eventCoords(p);
 
-  document.getElementById('ac-city').textContent = p.city || p.location || 'Local desconhecido';
+  document.getElementById('ac-city').textContent =
+    displayText(p.city) || displayText(p.location) || 'Localização indisponível';
+  document.getElementById('ac-kicker').textContent =
+    isSimulatedEvent(p) ? 'ORIGEM DO ATAQUE · SIMULADO' : 'ORIGEM DO ATAQUE';
 
-  const when = p.timestamp ? new Date(p.timestamp * 1000).toLocaleString('pt-BR') : '—';
+  const when = Number.isFinite(Number(p.timestamp)) && p.timestamp != null
+    ? new Date(Number(p.timestamp) * 1000).toLocaleString('pt-BR') : '';
+  const place = [p.city, p.region, p.country].map(displayText).filter(Boolean);
+  /* [rotulo, valor, obrigatorio]: obrigatorios mostram "Indisponivel" quando faltam */
   const rows = [
-    ['IP', p.ip],
-    ['Local', placeName(p)],
-    ['Provedor', p.isp],
-    ['Organização', p.org && p.org !== p.isp ? p.org : null],
-    ['Ataque', attackTypeFromPayload(p)],
-    ['Horário', when],
-    ['Coord. aprox.', `${(+p.lat).toFixed(3)}, ${(+p.lon).toFixed(3)}`],
+    ['IP', displayText(p.ip), true],
+    ['Local', place.filter((v, i) => place.indexOf(v) === i).join(', ') || displayText(p.location), true],
+    ['Alvo', p.target_lat != null || p.target_ip ? targetLabel(p) : '', false],
+    ['Provedor', displayText(p.isp), false],
+    ['Organização', displayText(p.org) !== displayText(p.isp) ? displayText(p.org) : '', false],
+    ['Ataque', attackTypeFromPayload(p), true],
+    ['Horário', when, true],
+    ['Coordenadas', coords ? `${coords.lat.toFixed(3)}, ${coords.lon.toFixed(3)} (aprox.)` : '', true],
+    ['Descrição', displayText(p.message), false],
   ];
   const dl = document.getElementById('ac-rows');
   dl.replaceChildren();
-  for (const [k, v] of rows) {
-    if (!v) continue;
+  for (const [k, v, required] of rows) {
+    if (!v && !required) continue;
     const dt = document.createElement('dt'); dt.textContent = k;
-    const dd = document.createElement('dd'); dd.textContent = v;
+    const dd = document.createElement('dd'); dd.textContent = v || UNAVAILABLE;
+    if (!v) dd.classList.add('is-missing');
     dl.append(dt, dd);
   }
 
-  const lat = +p.lat, lon = +p.lon, d = 0.06;
-  const bbox = [lon - d, lat - d, lon + d, lat + d].map(n => n.toFixed(4)).join(',');
-  document.getElementById('ac-frame').src =
-    `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat},${lon}`;
-  document.getElementById('ac-map').href =
-    `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=12/${lat}/${lon}`;
+  /* Mapa menor e botao sempre refletem o evento selecionado */
+  const frame = document.getElementById('ac-frame');
+  const empty = document.getElementById('ac-map-empty');
+  const btn = document.getElementById('ac-map');
+  if (coords) {
+    const d = 0.06;
+    const bbox = [coords.lon - d, coords.lat - d, coords.lon + d, coords.lat + d].map(n => n.toFixed(4)).join(',');
+    frame.src = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${coords.lat},${coords.lon}`;
+    frame.hidden = false;
+    empty.hidden = true;
+  } else {
+    frame.src = 'about:blank';
+    frame.hidden = true;
+    empty.hidden = false;
+  }
+  btn.disabled = !coords;
+  btn.title = coords ? 'Centraliza o globo nesta localização' : 'Este evento não tem coordenadas';
+  btn.onclick = () => focusGlobeOnEvent(p);
+
+  document.querySelectorAll('.attack-row.is-selected').forEach(r => r.classList.remove('is-selected'));
+  document.querySelectorAll('.attack-row').forEach(r => { if (r._alert === p) r.classList.add('is-selected'); });
 
   card.hidden = false;
 }
@@ -269,16 +336,101 @@ function hideAttackerCard() {
   if (!card) return;
   card.hidden = true;
   document.getElementById('ac-frame').src = 'about:blank';
+  document.querySelectorAll('.attack-row.is-selected').forEach(r => r.classList.remove('is-selected'));
+  globe.selected = null;
+  /* Solta o globo preso na regiao e volta a girar */
+  if (globe.hold) {
+    globe.hold = false;
+    globe.highlight = null;
+    animateGlobeTo([globe.rotation[0], GLOBE_HOME[1]], 1, 1800);
+  }
 }
 
-function addGlobeArc(fromLat, fromLon, toLat, toLon, severity) {
+/* Botao "VER REGIAO NO MAPA": gira o globo existente ate o evento, sem sair
+   da pagina. Fica preso na regiao enquanto o cartao estiver aberto. */
+function focusGlobeOnEvent(p) {
+  const coords = eventCoords(p);
+  if (!coords) {
+    showMapLabel('Coordenadas indisponíveis para este evento', 4000);
+    return false;
+  }
+  if (!globe.canvas) return false;
+
+  globe.followTimers.forEach(clearTimeout);
+  globe.followTimers = [];
+  if (globe.focusTimer) { clearTimeout(globe.focusTimer); globe.focusTimer = null; }
+  globe.hold = true;
+
+  /* Duracao proporcional ao giro: perto = rapido, outro lado do mundo = mais lento */
+  const center = [-globe.rotation[0], -globe.rotation[1]];
+  const dist = d3.geoDistance(center, [coords.lon, coords.lat]);
+  animateGlobeTo([-coords.lon, -coords.lat], GLOBE_FOCUS_ZOOM, 700 + dist / Math.PI * 1100);
+
+  /* Destaca o marcador do evento; se ja expirou, recoloca no lugar exato */
+  let marker = globe.markers.find(m => m.alert === p)
+    || globe.markers.find(m => m.ip === p.ip && m.lat === coords.lat && m.lon === coords.lon);
+  if (!marker) {
+    addGlobeMarker(coords.lat, coords.lon, { ip: p.ip, location: p.location, severity: 'high', alert: p });
+    marker = globe.markers[globe.markers.length - 1];
+  }
+  globe.highlight = { marker, born: performance.now() };
+
+  showMapLabel(`${placeName(p)} · ${coords.lat.toFixed(3)}, ${coords.lon.toFixed(3)}`, 6000);
+  return true;
+}
+
+function addGlobeArc(fromLat, fromLon, toLat, toLon, severity, opts = {}) {
   if (!globe.canvas) return;
   const color = severity === 'high' ? '#ff5577' : severity === 'medium' ? '#ffd27a' : '#8ee7ff';
+  const now = performance.now();
+  const delay  = opts.delay  ?? 0;
+  const travel = opts.travel ?? 1000;
+  const hold   = opts.hold   ?? GLOBE_ARC_MS - 1000;
   globe.arcs.push({
+    from: [fromLon, fromLat], to: [toLon, toLat],
     interp: d3.geoInterpolate([fromLon, fromLat], [toLon, toLat]),
     dist: d3.geoDistance([fromLon, fromLat], [toLon, toLat]),
-    color, born: performance.now(),
+    fromName: opts.fromName || '', toName: opts.toName || '',
+    color, born: now, start: now + delay, travel, life: delay + travel + hold,
   });
+}
+
+function easeInOutCubic(t) {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+/* Mostra o ataque inteiro: foca na origem, a camera acompanha o ataque
+   viajando ate o alvo, segura no impacto e depois volta a girar. */
+function showAttackOnGlobe(payload) {
+  if (!globe.canvas) return;
+  const lat = payload.lat, lon = payload.lon;
+  const target = attackTarget(payload);
+  const sev = 'high';
+  const fromName = `ORIGEM · ${payload.city || payload.location || payload.ip || ''}`;
+  const toName = `ALVO · ${[target.name, target.ip].filter(Boolean).join(' · ') || 'DEFENSOR'}`;
+
+  addGlobeMarker(lat, lon, { ip: payload.ip, location: payload.location, severity: sev, alert: payload });
+  addGlobeArc(lat, lon, target.lat, target.lon, sev, {
+    delay: ATTACK_LEAD_MS, travel: ATTACK_TRAVEL_MS, hold: ATTACK_HOLD_MS, fromName, toName,
+  });
+
+  /* Com uma regiao fixada pelo usuario, o ataque e desenhado mas a camera fica onde esta */
+  if (globe.hold) return;
+
+  /* Ataques longos pedem menos zoom para caber origem e alvo na tela */
+  const dist = d3.geoDistance([lon, lat], [target.lon, target.lat]);
+  const zoom = Math.max(1, Math.min(GLOBE_FOCUS_ZOOM, GLOBE_FOCUS_ZOOM - dist * 0.25));
+
+  globe.followTimers.forEach(clearTimeout);
+  if (globe.focusTimer) clearTimeout(globe.focusTimer);
+  animateGlobeTo([-lon, -lat], zoom, ATTACK_LEAD_MS);
+  globe.followTimers = [
+    setTimeout(() => animateGlobeTo([-target.lon, -target.lat], zoom, ATTACK_TRAVEL_MS), ATTACK_LEAD_MS),
+  ];
+  globe.focusTimer = setTimeout(() => {
+    globe.focusTimer = null;
+    animateGlobeTo([globe.rotation[0], GLOBE_HOME[1]], 1, 1800);
+  }, ATTACK_LEAD_MS + ATTACK_TRAVEL_MS + ATTACK_HOLD_MS);
 }
 
 /* Interpola rotacao (caminho mais curto em longitude) e zoom */
@@ -293,7 +445,8 @@ function animateGlobeTo(rotation, zoom, ms) {
 }
 
 function focusMapOn(lat, lon, holdMs = 4000) {
-  if (!globe.canvas) return;
+  if (!globe.canvas || globe.hold) return;
+  globe.followTimers.forEach(clearTimeout);
   animateGlobeTo([-lon, -lat], GLOBE_FOCUS_ZOOM, 1200);
   if (globe.focusTimer) clearTimeout(globe.focusTimer);
   globe.focusTimer = setTimeout(() => {
@@ -318,12 +471,12 @@ function globeFrame(now) {
     globe.rotation = [from[0] + (to[0] - from[0]) * e, from[1] + (to[1] - from[1]) * e];
     globe.zoom = globe.tween.fromZoom + (globe.tween.toZoom - globe.tween.fromZoom) * e;
     if (t >= 1) globe.tween = null;
-  } else if (!globe.dragging && !globe.focusTimer && now - globe.lastInteraction > GLOBE_IDLE_MS) {
+  } else if (!globe.dragging && !globe.focusTimer && !globe.hold && now - globe.lastInteraction > GLOBE_IDLE_MS) {
     globe.rotation[0] += GLOBE_SPIN_DEG_S * dt / 1000;
   }
 
   globe.markers = globe.markers.filter(m => m.expires > now);
-  globe.arcs    = globe.arcs.filter(a => now - a.born < GLOBE_ARC_MS);
+  globe.arcs    = globe.arcs.filter(a => now - a.born < a.life);
 
   syncProjections();
   drawGlobe(now);
@@ -403,22 +556,85 @@ function drawGlobe(now) {
   drawGlobeMarkers(now);
 }
 
-/* Arcos elevados de grande circulo, origem -> defensor */
+/* Nome da cidade escrito ao lado do ponto, com contorno escuro para ler */
+function drawGlobeLabel(x, y, text, color, alpha, below = false) {
+  if (!text) return;
+  const { ctx } = globe;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.font = '600 11px "JetBrains Mono", ui-monospace, monospace';
+  ctx.textBaseline = 'middle';
+  /* Origem acima do ponto, alvo abaixo: nao se sobrepoem quando sao vizinhos.
+     Perto da borda direita o texto vai para a esquerda do ponto. */
+  const w = ctx.measureText(text).width;
+  const tx = x + 10 + w > globe.width - 6 ? Math.max(6, x - 10 - w) : x + 10;
+  const ty = below ? y + 12 : y - 10;
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+  ctx.strokeText(text, tx, ty);
+  ctx.fillStyle = color;
+  ctx.fillText(text, tx, ty);
+  ctx.restore();
+}
+
+/* Arcos elevados de grande circulo, origem -> alvo */
 function drawGlobeArcs(now, cx, cy, r) {
   const { ctx } = globe;
   const center = [-globe.rotation[0], -globe.rotation[1]];
+  const targetColor = globe.colors.cyan || '#66d9ff';
   for (const a of globe.arcs) {
-    const age = now - a.born;
-    const grow = Math.min(1, age / 1000);
-    const alpha = 0.85 * (1 - age / GLOBE_ARC_MS);
+    const age = now - a.start;
+    const grow = easeInOutCubic(Math.max(0, Math.min(1, age / a.travel)));
+    /* Some aos poucos no ultimo segundo de vida */
+    const alpha = 0.95 * Math.max(0, Math.min(1, (a.life - (now - a.born)) / 1000));
     const lift = 0.05 + a.dist * 0.12;
-    const steps = 48;
-    ctx.strokeStyle = a.color;
-    ctx.globalAlpha = alpha;
-    ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    let pen = false, head = null;
-    for (let i = 0; i <= steps * grow; i++) {
+    const steps = 64;
+
+    /* Origem: nome da cidade */
+    if (globeVisible(a.from[0], a.from[1])) {
+      const [ox, oy] = globe.front(a.from);
+      drawGlobeLabel(ox, oy, a.fromName, a.color, alpha);
+    }
+
+    /* Alvo: mira girando + nome, desde o inicio, para ver para onde vai */
+    if (globeVisible(a.to[0], a.to[1])) {
+      const [tx, ty] = globe.front(a.to);
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = targetColor;
+      ctx.lineWidth = 1.4;
+      ctx.translate(tx, ty);
+      ctx.rotate(now / 600);
+      ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath();
+      for (const s of [[0, -12, 0, -5], [0, 5, 0, 12], [-12, 0, -5, 0], [5, 0, 12, 0]]) {
+        ctx.moveTo(s[0], s[1]); ctx.lineTo(s[2], s[3]);
+      }
+      ctx.stroke();
+      ctx.restore();
+
+      /* Impacto: ondas saindo do alvo quando o ataque chega */
+      if (age >= a.travel) {
+        const hit = age - a.travel;
+        for (let k = 0; k < 3; k++) {
+          const phase = ((hit + k * 300) % 900) / 900;
+          ctx.globalAlpha = alpha * (1 - phase);
+          ctx.strokeStyle = a.color;
+          ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(tx, ty, 6 + phase * 26, 0, Math.PI * 2); ctx.stroke();
+        }
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = a.color;
+        ctx.beginPath(); ctx.arc(tx, ty, 4, 0, Math.PI * 2); ctx.fill();
+      }
+      drawGlobeLabel(tx, ty, a.toName, targetColor, alpha, true);
+    }
+
+    if (age < 0) continue;
+
+    /* Linha percorrida ate agora */
+    const pts = [];
+    for (let i = 0; i <= Math.floor(steps * grow); i++) {
       const t = i / steps;
       const p = a.interp(t);
       const k = 1 + lift * Math.sin(Math.PI * t);
@@ -426,13 +642,33 @@ function drawGlobeArcs(now, cx, cy, r) {
       const px = cx + (x - cx) * k, py = cy + (y - cy) * k;
       /* Visivel se esta na frente ou "sobe" alem da silhueta */
       const visible = d3.geoDistance(p, center) < Math.PI / 2 || Math.hypot(px - cx, py - cy) > r;
-      if (visible) { pen ? ctx.lineTo(px, py) : ctx.moveTo(px, py); pen = true; head = [px, py]; }
-      else pen = false;
+      pts.push(visible ? [px, py] : null);
     }
-    ctx.stroke();
+    const strokePts = (list, width, a2) => {
+      ctx.globalAlpha = a2;
+      ctx.lineWidth = width;
+      ctx.beginPath();
+      let pen = false;
+      for (const q of list) {
+        if (q) { pen ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]); pen = true; }
+        else pen = false;
+      }
+      ctx.stroke();
+    };
+    ctx.strokeStyle = a.color;
+    strokePts(pts, 1.4, alpha * 0.7);
+    /* Rastro brilhante logo atras da cabeca */
+    if (grow < 1) strokePts(pts.slice(-10), 3, alpha);
+
+    const head = pts[pts.length - 1];
     if (head && grow < 1) {
-      ctx.fillStyle = a.color;
-      ctx.beginPath(); ctx.arc(head[0], head[1], 2.2, 0, Math.PI * 2); ctx.fill();
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.shadowColor = a.color;
+      ctx.shadowBlur = 14;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.arc(head[0], head[1], 3.2, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
     }
   }
   ctx.globalAlpha = 1;
@@ -453,24 +689,64 @@ function drawGlobeMarkers(now) {
     ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2); ctx.fill();
   }
   ctx.globalAlpha = 1;
+  drawGlobeHighlight(now);
+}
+
+/* Marcador escolhido em "VER REGIAO NO MAPA": pulso forte nos primeiros
+   segundos e depois um anel fixo enquanto a regiao estiver selecionada. */
+function drawGlobeHighlight(now) {
+  const h = globe.highlight;
+  if (!h || !globe.markers.includes(h.marker)) return;
+  const m = h.marker;
+  if (!globeVisible(m.lon, m.lat)) return;
+  const { ctx } = globe;
+  const [x, y] = globe.front([m.lon, m.lat]);
+  const age = now - h.born;
+  ctx.save();
+  ctx.strokeStyle = m.color;
+  ctx.shadowColor = m.color;
+  ctx.shadowBlur = 10;
+  if (age < 3600) {
+    for (let k = 0; k < 2; k++) {
+      const phase = ((age + k * 450) % 900) / 900;
+      ctx.globalAlpha = (1 - phase) * (1 - age / 3600);
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(x, y, 6 + phase * 30, 0, Math.PI * 2); ctx.stroke();
+    }
+  }
+  ctx.globalAlpha = 0.9;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(x, y, 9 + Math.sin(now / 300) * 1.5, 0, Math.PI * 2); ctx.stroke();
+  ctx.fillStyle = m.color;
+  ctx.beginPath(); ctx.arc(x, y, 4.5, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+/* Selecionar um evento da tabela: abre o cartao e, havendo coordenadas,
+   repete o ataque no globo. Sem coordenadas, mostra so o cartao. */
+function selectAlert(payload) {
+  if (eventCoords(payload)) { reshowAlertOnMap(payload); return; }
+  showSection('dash');
+  showAttackerCard(payload);
 }
 
 /* Redesenha no globo um alerta que ja tinha expirado (marcador removido apos MARKER_LIFETIME_MS) */
 function reshowAlertOnMap(payload) {
-  const lat = payload.lat, lon = payload.lon;
-  if (lat == null || lon == null) return;
+  if (!eventCoords(payload)) return;
 
   showSection('dash');
+  /* Nova selecao: solta a regiao fixada antes, para a camera seguir este ataque */
+  globe.hold = false;
+  globe.highlight = null;
+  /* Cartao atualizado na hora: o botao nunca age sobre o evento anterior */
+  showAttackerCard(payload);
 
   setTimeout(() => {
-    const defLat = state.defender.lat, defLon = state.defender.lon;
-    const sev = 'high';
-    addGlobeMarker(lat, lon, { ip: payload.ip, location: payload.location, severity: sev, alert: payload });
-    addGlobeArc(lat, lon, defLat, defLon, sev);
-    focusMapOn(lat, lon, 4000);
+    if (globe.selected !== payload) return;   /* outro evento foi escolhido no meio */
+    showAttackOnGlobe(payload);
     const type = attackTypeFromPayload(payload);
-    showMapLabel(`${placeName(payload)} · ${type}`, 5000);
-    showAttackerCard(payload);
+    const alvo = targetLabel(payload);
+    showMapLabel(`${placeName(payload)}${alvo ? ' → ' + alvo : ''} · ${type}`, 5000);
   }, 120);
 }
 
@@ -652,7 +928,10 @@ function prependAlertCard(payload) {
   const country = payload.country || '';
   const now  = new Date();
   const time = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
-  const desc = payload.message ? payload.message.slice(0, 60) : `${type} de ${ip}`;
+  const alvo = targetLabel(payload);
+  const desc = alvo
+    ? `${payload.city || payload.location || ip} → ${alvo}`
+    : (payload.message ? payload.message.slice(0, 60) : `${type} de ${ip}`);
   const flag = flagEmoji(country);
 
   function makeRow() {
@@ -661,13 +940,21 @@ function prependAlertCard(payload) {
     row.innerHTML = `
       <span class="row-time">${time}</span>
       <span><span class="badge ${badgeClass(type)}">${type}</span></span>
-      <span class="row-desc" title="Clique para mostrar novamente no mapa">${escHtml(desc)}</span>
+      <span class="row-desc">${escHtml(desc)}</span>
       <span class="row-ip">${escHtml(ip)}</span>
       <span class="row-flag">${flag}</span>
     `;
-    if (payload.lat != null && payload.lon != null) {
-      row.querySelector('.row-desc').addEventListener('click', () => reshowAlertOnMap(payload));
-    }
+    /* Descricao completa no tooltip (a coluna corta com reticencias) e
+       linha inteira selecionavel por mouse ou teclado */
+    const full = [desc, displayText(payload.message)].filter((v, i, a) => v && a.indexOf(v) === i).join('\n');
+    row.title = `${full}\nClique para ver os detalhes`;
+    row._alert = payload;
+    row.tabIndex = 0;
+    row.setAttribute('role', 'button');
+    row.addEventListener('click', () => selectAlert(payload));
+    row.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectAlert(payload); }
+    });
     return row;
   }
 
@@ -1184,14 +1471,12 @@ function handleNewAlert(payload) {
   prependAlertCard(payload);
 
   /* Globo: marcador + arco */
-  const lat = payload.lat, lon = payload.lon;
-  if (lat != null && lon != null) {
-    const defLat = state.defender.lat, defLon = state.defender.lon;
-    const sev = 'high';
-    addGlobeMarker(lat, lon, { ip, location: payload.location, severity: sev, alert: payload });
-    addGlobeArc(lat, lon, defLat, defLon, sev);
-    focusMapOn(lat, lon, 4000);
-    showMapLabel(`${placeName(payload)} · ${type}`, 5000);
+  if (eventCoords(payload)) {
+    showAttackOnGlobe(payload);
+    const alvo = targetLabel(payload);
+    if (!globe.hold) {
+      showMapLabel(`${placeName(payload)}${alvo ? ' → ' + alvo : ''} · ${type}`, ATTACK_LEAD_MS + ATTACK_TRAVEL_MS + ATTACK_HOLD_MS);
+    }
   }
 
   /* Atualiza donut e top IPs no dashboard */
@@ -1461,7 +1746,8 @@ function termLogAlert(payload) {
   const type  = attackTypeFromPayload(payload);
   const ip    = payload.ip || '—';
   const loc   = payload.location || payload.country || '';
-  termPrint(`[BLOCK] ${type.padEnd(14)} ${ip}  ${loc}`, 't-block');
+  const alvo  = targetLabel(payload);
+  termPrint(`[BLOCK] ${type.padEnd(14)} ${ip}  ${loc}${alvo ? '  → ' + alvo : ''}`, 't-block');
   /* Atualiza a linha do footer também */
   setText('terminal-line-1', `[BLOCK] ${type} · ${ip} bloqueado`);
 }

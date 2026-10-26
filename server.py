@@ -106,6 +106,19 @@ INGEST_TOKEN = _load_ingest_token()
 _login_attempts = {}
 LOGIN_MAX_ATTEMPTS = 5
 LOGIN_WINDOW_SECONDS = 300
+_LOCAL_PROXIES = {"127.0.0.1", "::1"}
+
+
+def _client_ip():
+    """IP real do visitante. Atras do Cloudflare Tunnel todo acesso chega de
+    127.0.0.1; ai o IP verdadeiro vem em CF-Connecting-IP. O cabecalho so e
+    aceito de conexoes locais, para ninguem de fora falsificar o proprio IP."""
+    remote = request.remote_addr or "unknown"
+    if remote in _LOCAL_PROXIES:
+        forwarded = (request.headers.get("CF-Connecting-IP") or "").strip()
+        if forwarded:
+            return forwarded[:64]
+    return remote
 
 
 def _login_rate_limited(ip):
@@ -192,7 +205,7 @@ def login():
     safe_next = requested_next if _is_safe_redirect_target(requested_next) else "/"
 
     if request.method == "POST":
-        client_ip = request.remote_addr or "unknown"
+        client_ip = _client_ip()
         if _login_rate_limited(client_ip):
             error = "Muitas tentativas. Tente novamente em alguns minutos."
         elif not _valid_csrf(request.form.get("csrf_token") or ""):
@@ -276,6 +289,7 @@ def _net_stats():
 _ALLOWED_ALERT_FIELDS = {
     "ip", "country", "region", "city", "location", "type",
     "reason", "message", "countryCode", "isp", "org",
+    "target_ip", "target_city", "target_location",
 }
 _MAX_STR_LEN = 200
 _CONTROL_CHARS = re.compile(r"[\r\n\x00-\x1f]")
@@ -291,7 +305,7 @@ def _sanitize_alert(data):
         if isinstance(value, str):
             clean[key] = _CONTROL_CHARS.sub(" ", value)[:_MAX_STR_LEN]
 
-    for key in ("lat", "lon"):
+    for key in ("lat", "lon", "target_lat", "target_lon"):
         try:
             clean[key] = float(data.get(key))
         except (TypeError, ValueError):

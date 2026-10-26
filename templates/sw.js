@@ -1,4 +1,4 @@
-const CACHE_NAME = 'datasentinel-v4';
+const CACHE_NAME = 'datasentinel-v5';
 const ASSETS = [
   '/script.js',
   '/style.css',
@@ -31,17 +31,15 @@ self.addEventListener('fetch', event => {
   if (requestUrl.origin !== self.location.origin) return;
   if (NEVER_CACHE_PATHS.includes(requestUrl.pathname)) return;
 
+  // Rede primeiro: sempre pega a versao nova do servidor; o cache so e usado
+  // offline. Com cache primeiro, mudancas no script.js nunca chegavam ao navegador.
   event.respondWith(
-    caches.match(event.request).then(cached => {
-      if (cached) return cached;
-
-      return fetch(event.request).then(response => {
-        if (response && response.status === 200 && response.type === 'basic') {
-          const responseClone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(event.request, responseClone));
-        }
-        return response;
-      }).catch(() => caches.match(event.request));
-    })
+    fetch(event.request).then(response => {
+      if (response && response.status === 200 && response.type === 'basic') {
+        const responseClone = response.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(event.request, responseClone));
+      }
+      return response;
+    }).catch(() => caches.match(event.request))
   );
 });
