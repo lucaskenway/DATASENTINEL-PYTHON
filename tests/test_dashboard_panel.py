@@ -58,3 +58,10 @@ def test_region_button_uses_globe_not_external_map():
     # O link antigo abria o OpenStreetMap em nova aba
     assert "openstreetmap.org/?mlat" not in js
     assert "window.open" not in js
+
+
+def test_tentativas_detectadas_nao_usa_conexoes_tcp():
+    js = _read("script.js")
+    # O card conta alertas; conexoes TCP ativas (connections_active) nao podem sobrescreve-lo
+    assert "setText('metric-connections', conns)" not in js
+    assert "setText('metric-connections', state.connectionsToday)" in js

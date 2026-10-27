@@ -1213,9 +1213,10 @@ async function pollMetrics() {
     appendChartPoint(rx, tx);
     appendMiniTrend(d.network_activity ?? 0);
 
-    /* KPI counters */
+    /* KPI counters. "Tentativas detectadas" conta alertas (handleNewAlert);
+       conexoes TCP ativas vao so para o rodape. */
     const conns = d.connections_active ?? 0;
-    setText('metric-connections', conns);
+    setText('metric-connections', state.connectionsToday);
     setText('metric-threats', state.threatsTotal);
     setText('metric-unique-ips', state.ipsBlocked.size);
     setText('footer-conns', conns);
