@@ -2,6 +2,7 @@ import ipaddress
 import os
 import re
 import secrets
+import sys
 import time
 from functools import wraps
 from urllib.parse import urlparse
@@ -23,6 +24,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 import psutil
 from database import count_alerts, get_alerts, save_alert
+from database import status as db_status
 
 load_dotenv()
 
@@ -441,6 +443,108 @@ def api_metrics():
     )
 
 
+# ---------------------------------------------------------------------------
+# /api/system: estado do host para as paginas Rede, Firewall, Config e Sobre.
+# Somente leitura e so para usuario logado. Partes caras ficam em cache curto.
+# ---------------------------------------------------------------------------
+
+_SERVER_STARTED = time.time()
+_SYSTEM_CACHE_SECONDS = 15
+_system_cache = {"t": 0.0, "slow": None}
+_MAX_CONNECTIONS = 80
+
+
+def _ai_model_info():
+    data_dir = os.environ.get("DATASENTINEL_DATA_DIR", "data")
+    model = os.path.join(data_dir, "ai_model.joblib")
+    dataset = os.path.join(data_dir, "ai_training_data.jsonl")
+    samples = 0
+    if os.path.isfile(dataset):
+        try:
+            with open(dataset, "rb") as f:
+                samples = sum(1 for _ in f)
+        except OSError:
+            samples = 0
+    return {
+        "trained": os.path.isfile(model),
+        "trained_at": os.path.getmtime(model) if os.path.isfile(model) else None,
+        "samples": samples,
+    }
+
+
+def _addr(a):
+    return {"ip": a.ip, "port": a.port} if a else None
+
+
+def _network_snapshot():
+    try:
+        conns = psutil.net_connections(kind="inet")
+    except Exception:
+        conns = []
+
+    listening = sorted(
+        {(c.laddr.ip, c.laddr.port) for c in conns if c.status == psutil.CONN_LISTEN and c.laddr},
+        key=lambda x: x[1],
+    )
+    active = [c for c in conns if c.raddr and c.status != psutil.CONN_LISTEN]
+
+    interfaces = []
+    try:
+        addrs = psutil.net_if_addrs()
+        stats = psutil.net_if_stats()
+        io = psutil.net_io_counters(pernic=True)
+    except Exception:
+        addrs, stats, io = {}, {}, {}
+    for name, items in addrs.items():
+        ipv4 = next((a.address for a in items if a.family == 2), None)
+        st = stats.get(name)
+        counters = io.get(name)
+        interfaces.append({
+            "name": name,
+            "ip": ipv4,
+            "up": bool(st and st.isup),
+            "bytes_recv": counters.bytes_recv if counters else None,
+            "bytes_sent": counters.bytes_sent if counters else None,
+        })
+
+    return {
+        "interfaces": interfaces,
+        "listening": [{"ip": ip, "port": port} for ip, port in listening],
+        "connections": [
+            {"laddr": _addr(c.laddr), "raddr": _addr(c.raddr), "status": c.status}
+            for c in active[:_MAX_CONNECTIONS]
+        ],
+        "connections_total": len(active),
+    }
+
+
+@app.route("/api/system")
+@login_required
+def api_system():
+    now = time.time()
+    if _system_cache["slow"] is None or now - _system_cache["t"] > _SYSTEM_CACHE_SECONDS:
+        _system_cache["slow"] = {"mongodb": db_status(), "ai": _ai_model_info()}
+        _system_cache["t"] = now
+    return jsonify({
+        "platform": sys.platform,
+        "server_uptime": round(now - _SERVER_STARTED),
+        "socket_clients": _state.get("socket_clients", 0),
+        "config": {
+            "admin_user": ADMIN_USER,
+            "email": bool(os.environ.get("EMAIL_USER") and os.environ.get("EMAIL_PASS")),
+            "auth_log": bool(os.environ.get("DATASENTINEL_AUTH_LOG_PATH")),
+            "fail2ban_log": bool(os.environ.get("DATASENTINEL_FAIL2BAN_LOG_PATH")),
+            "eve_log": bool(os.environ.get("DATASENTINEL_EVE_LOG_PATH")),
+            "dedup_window_s": float(os.environ.get("DATASENTINEL_DEDUP_WINDOW", "60") or 60),
+            "login_max_attempts": LOGIN_MAX_ATTEMPTS,
+            "login_window_s": LOGIN_WINDOW_SECONDS,
+        },
+        **_system_cache["slow"],
+        "network": _network_snapshot(),
+        "ts": now,
+    })
+
+
 @app.route("/api/logs")
 @login_required
 def api_logs():
@@ -535,7 +639,14 @@ def ingest_alert():
 def on_connect():
     if not session.get("logged_in"):
         return False
+    _state["socket_clients"] = _state.get("socket_clients", 0) + 1
     emit("session_init", {"threats_total": _state["threats_total"]})
+
+
+@socketio.on("disconnect")
+def on_disconnect(*_args):
+    if session.get("logged_in"):
+        _state["socket_clients"] = max(0, _state.get("socket_clients", 0) - 1)
 
 
 if __name__ == "__main__":
