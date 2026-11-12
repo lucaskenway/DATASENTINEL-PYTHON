@@ -52,8 +52,9 @@ def random_ip():
 
 
 def build_payload(severity):
-    loc = random.choice(LOCATIONS)
+    loc, target = random.sample(LOCATIONS, 2)
     ip = random_ip()
+    target_ip = random_ip()
     details = SEVERITY_MAP[severity]
     return {
         "ip": ip,
@@ -66,7 +67,15 @@ def build_payload(severity):
         "type": details["type"],
         "reason": details["reason"],
         "timestamp": time.time(),
-        "message": f"SIMULATED {severity.upper()} alert from {ip} ({loc['location']})",
+        "target_ip": target_ip,
+        "target_city": target["city"],
+        "target_location": target["location"],
+        "target_lat": target["lat"],
+        "target_lon": target["lon"],
+        "message": (
+            f"SIMULATED {severity.upper()} attack from {ip} ({loc['location']}) "
+            f"-> {target_ip} ({target['location']})"
+        ),
     }
 
 
@@ -82,7 +91,10 @@ def send_alert(session, severity):
         status = "OK" if resp.ok else f"HTTP {resp.status_code}"
     except requests.RequestException as exc:
         status = f"ERRO ({exc})"
-    print(f"[{status}] {severity.upper()} -> {payload['ip']} @ {payload['location']}")
+    print(
+        f"[{status}] {severity.upper()} {payload['ip']} @ {payload['location']} "
+        f"-> {payload['target_ip']} @ {payload['target_location']}"
+    )
 
 
 def sequential_mode(session):

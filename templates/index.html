@@ -41,7 +41,7 @@
 
 <div class="app-wrapper">
 
-  <!-- ─── TOP HEADER BAR ─── -->
+  <!-- ─── TOP HEADER BAR (central de inteligência) ─── -->
   <header class="topbar">
     <div class="topbar-brand">
       <div class="brand-shield" aria-hidden="true">
@@ -58,247 +58,155 @@
       </div>
       <div class="brand-text">
         <div class="topbar-logo">DataSentinel</div>
-        <div class="topbar-sub">CYBER DEFENSE SYSTEM</div>
+        <div class="topbar-sub">CYBER DEFENSE SYSTEM // THREAT INTELLIGENCE</div>
       </div>
     </div>
-    <div class="topbar-center">
-      <div class="topbar-stat-block">
-        <div class="tstat-label">SYSTEM STATUS</div>
-        <div class="tstat-value protected"><span class="tstat-dot" aria-hidden="true"></span>PROTECTED</div>
-      </div>
-      <div class="topbar-divider" aria-hidden="true"></div>
-      <div class="topbar-stat-block">
-        <div class="tstat-label">ACTIVE MODE</div>
-        <div class="tstat-value cyan" id="socket-status">REAL-TIME MONITORING</div>
-      </div>
-    </div>
-    <div class="topbar-clock">
-      <div class="clock-time mono" id="clock-time">--:--:--</div>
-      <div class="clock-date mono" id="clock-date">--/--/----</div>
+
+    <nav class="topnav" aria-label="Seções">
+      <ul class="menu">
+        <li class="active" data-section="dash" tabindex="0"><div class="nav-copy"><strong>DASHBOARD</strong><span>VISÃO GERAL</span></div></li>
+        <li data-section="ataques" tabindex="0"><div class="nav-copy"><strong>ATAQUES</strong><span>TEMPO REAL</span></div></li>
+        <li data-section="firewall" tabindex="0"><div class="nav-copy"><strong>FIREWALL</strong><span>BLOQUEIOS</span></div></li>
+        <li data-section="logs" tabindex="0"><div class="nav-copy"><strong>LOGS</strong><span>EVENTOS</span></div></li>
+        <li data-section="net" tabindex="0"><div class="nav-copy"><strong>REDE</strong><span>TRÁFEGO</span></div></li>
+        <li data-section="config" tabindex="0"><div class="nav-copy"><strong>CONFIG</strong><span>SISTEMA</span></div></li>
+        <li data-section="sobre" tabindex="0"><div class="nav-copy"><strong>SOBRE</strong><span>DATASENTINEL</span></div></li>
+      </ul>
+    </nav>
+
+    <div class="topbar-readouts mono">
+      <div class="hud-readout"><span class="hud-k">FLASK-SOCKETIO</span><span class="hud-v" id="socket-status">CONECTANDO</span></div>
+      <div class="hud-readout"><span class="hud-k">ALERTAS</span><span class="hud-v" id="metric-threats">—</span></div>
+      <div class="hud-readout"><span class="hud-k">TENTATIVAS</span><span class="hud-v" id="metric-connections">—</span></div>
+      <div class="hud-readout"><span class="hud-k">IPS</span><span class="hud-v" id="metric-unique-ips">0</span></div>
+      <div class="hud-readout"><span class="hud-k">EVENTOS/MIN</span><span class="hud-v" id="hud-epm">0</span></div>
+      <div class="hud-readout hud-clock"><span class="hud-k" id="clock-date">--/--/----</span><span class="hud-v" id="clock-time">--:--:--</span></div>
     </div>
     <button type="button" id="btnLogout" class="btn-logout mono" title="Sair">⏻ SAIR</button>
     <form id="logout-form" action="/logout" method="post" style="display:none;">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     </form>
-    <div class="topbar-hacker" aria-hidden="true">
-      <div class="hacker-binary" id="hackerBinary"></div>
-      <div class="hacker-fig"></div>
-    </div>
   </header>
 
-  <!-- ─── LAYOUT: SIDEBAR + MAIN ─── -->
   <div class="layout">
-
-    <!-- SIDEBAR -->
-    <aside class="sidebar">
-      <ul class="menu" role="navigation">
-        <li class="active" data-section="dash">
-          <span class="nav-ico" aria-hidden="true">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <rect x="3" y="3" width="7" height="7" rx="1.5"/>
-              <rect x="14" y="3" width="7" height="7" rx="1.5"/>
-              <rect x="3" y="14" width="7" height="7" rx="1.5"/>
-              <rect x="14" y="14" width="7" height="7" rx="1.5"/>
-            </svg>
-          </span>
-          <div class="nav-copy"><strong>DASHBOARD</strong><span>VISÃO GERAL</span></div>
-        </li>
-        <li data-section="ataques">
-          <span class="nav-ico" aria-hidden="true">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-            </svg>
-          </span>
-          <div class="nav-copy"><strong>ATAQUES</strong><span>TEMPO REAL</span></div>
-        </li>
-        <li data-section="firewall">
-          <span class="nav-ico" aria-hidden="true">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-            </svg>
-          </span>
-          <div class="nav-copy"><strong>FIREWALL</strong><span>REGRAS E BLOQUEIOS</span></div>
-        </li>
-        <li data-section="logs">
-          <span class="nav-ico" aria-hidden="true">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <path d="M4 6h16M4 12h10M4 18h14"/>
-            </svg>
-          </span>
-          <div class="nav-copy"><strong>LOGS</strong><span>EVENTOS DO SISTEMA</span></div>
-        </li>
-        <li data-section="net">
-          <span class="nav-ico" aria-hidden="true">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/>
-              <path d="M12 7v5M12 12L5 17M12 12l7 5"/>
-            </svg>
-          </span>
-          <div class="nav-copy"><strong>REDE</strong><span>MONITORAMENTO</span></div>
-        </li>
-        <li data-section="config">
-          <span class="nav-ico" aria-hidden="true">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <circle cx="12" cy="12" r="3"/>
-              <path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41m11.32-11.32l1.41-1.41"/>
-            </svg>
-          </span>
-          <div class="nav-copy"><strong>CONFIGURAÇÕES</strong><span>SISTEMA</span></div>
-        </li>
-        <li data-section="sobre">
-          <span class="nav-ico" aria-hidden="true">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <circle cx="12" cy="12" r="10"/>
-              <path d="M12 8v4m0 4h.01"/>
-            </svg>
-          </span>
-          <div class="nav-copy"><strong>SOBRE</strong><span>DATASENTINEL</span></div>
-        </li>
-      </ul>
-
-      <div class="sistema-box">
-        <h3 class="sistema-title">SISTEMA</h3>
-        <div class="sistema-item">
-          <div class="sistema-row"><span>CPU USO</span><span class="mono" id="readout-cpu">—</span></div>
-          <div class="progress"><div id="bar-cpu" style="width:0%"></div></div>
-        </div>
-        <div class="sistema-item">
-          <div class="sistema-row"><span>MEMÓRIA</span><span class="mono" id="readout-mem">—</span></div>
-          <div class="progress"><div id="bar-mem" style="width:0%"></div></div>
-        </div>
-        <div class="sistema-item">
-          <div class="sistema-row"><span>DISCO</span><span class="mono" id="readout-disk">—</span></div>
-          <div class="progress"><div id="bar-disk" style="width:0%"></div></div>
-        </div>
-        <div class="sistema-item">
-          <div class="sistema-row"><span>REDE (TX/RX)</span></div>
-          <div class="net-speeds">
-            <span class="mono net-rx-val" id="net-rx">— MB/s</span>
-            <span class="mono net-tx-val" id="net-tx">— MB/s</span>
-          </div>
-          <div class="net-mini"><canvas id="miniTrend" height="36"></canvas></div>
-        </div>
-        <p class="sys-note mono" id="metric-latency">polling…</p>
-      </div>
-    </aside>
 
     <!-- ─── MAIN CONTENT ─── -->
     <main class="main">
 
       <!-- ═══════════════════════════════════════════
-           SEÇÃO: DASHBOARD
+           SEÇÃO: DASHBOARD (central de inteligência)
       ═══════════════════════════════════════════ -->
-      <section class="section-content active" data-section="dash">
-        <section class="cards" aria-label="Indicadores">
-          <div class="kpi kpi-red">
-            <div class="kpi-label">ATAQUES BLOQUEADOS</div>
-            <div class="kpi-value mono" id="metric-threats">—</div>
-            <div class="kpi-sub mono"><span id="sub-threats">+0</span> hoje</div>
-            <div class="kpi-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-            </div>
-          </div>
-          <div class="kpi kpi-orange">
-            <div class="kpi-label">TENTATIVAS DETECTADAS</div>
-            <div class="kpi-value mono" id="metric-connections">—</div>
-            <div class="kpi-sub mono"><span id="sub-connections">+0</span> hoje</div>
-            <div class="kpi-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.4">
-                <circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="7" stroke-dasharray="2 2"/>
-                <line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/>
-                <line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/>
-              </svg>
-            </div>
-          </div>
-          <div class="kpi kpi-red">
-            <div class="kpi-label">IP'S BLOQUEADOS</div>
-            <div class="kpi-value mono" id="metric-unique-ips">0</div>
-            <div class="kpi-sub mono"><span id="sub-ips">+0</span> hoje</div>
-            <div class="kpi-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
-            </div>
-          </div>
-          <div class="kpi kpi-green">
-            <div class="kpi-label">STATUS DO SISTEMA</div>
-            <div class="kpi-value-lg mono">PROTEGIDO</div>
-            <div class="kpi-sub-green mono">100%</div>
-            <div class="kpi-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
-            </div>
-          </div>
-        </section>
+      <section class="section-content active intel" data-section="dash">
+        <div class="intel-grid">
 
-        <div class="content-grid">
-          <!-- MAP + LOG -->
-          <div class="panel map-panel">
-            <div class="panel-header">
-              <h2>ATAQUES EM TEMPO REAL</h2>
-              <select class="region-select mono" id="map-mode"><option>MUNDO ▾</option></select>
+          <!-- COLUNA ESQUERDA -->
+          <div class="intel-col intel-left">
+            <div class="panel hud-panel">
+              <div class="panel-header"><h2>FONTES DE DETECÇÃO</h2><span class="panel-code mono">SRC.01</span></div>
+              <div class="intel-sources mono" id="intel-sources"></div>
             </div>
+
+            <div class="panel hud-panel">
+              <div class="panel-header"><h2>NÍVEL DE ATIVIDADE</h2><span class="panel-code mono">ACT.02</span></div>
+              <div class="intel-activity">
+                <div class="activity-head">
+                  <span class="activity-value mono" id="intel-activity-value">0</span>
+                  <span class="activity-sub mono">alertas · últimos 15 min<br><span id="intel-activity-level">SEM ATIVIDADE</span></span>
+                </div>
+                <div class="activity-bars" id="intel-activity-bars" aria-label="Alertas por minuto nos últimos 15 minutos"></div>
+              </div>
+            </div>
+
+            <div class="panel hud-panel">
+              <div class="panel-header"><h2>VETORES DE ATAQUE</h2><span class="panel-code mono">DET.03</span></div>
+              <div class="intel-vectors mono" id="intel-vectors"></div>
+            </div>
+
+            <div class="panel hud-panel intel-net">
+              <div class="panel-header"><h2>TRÁFEGO DE REDE</h2><span class="panel-code mono">NET.04</span></div>
+              <div class="graph"><canvas id="networkChart"></canvas></div>
+              <div class="host-row mono">
+                <span>↓ <b class="net-rx-val" id="net-rx">— MB/s</b></span>
+                <span>↑ <b class="net-tx-val" id="net-tx">— MB/s</b></span>
+                <span>API <b id="metric-latency">—</b></span>
+              </div>
+              <div class="host-bars mono">
+                <div class="sistema-item"><div class="sistema-row"><span>CPU</span><span id="readout-cpu">—</span></div><div class="progress"><div id="bar-cpu" style="width:0%"></div></div></div>
+                <div class="sistema-item"><div class="sistema-row"><span>MEM</span><span id="readout-mem">—</span></div><div class="progress"><div id="bar-mem" style="width:0%"></div></div></div>
+                <div class="sistema-item"><div class="sistema-row"><span>DISCO</span><span id="readout-disk">—</span></div><div class="progress"><div id="bar-disk" style="width:0%"></div></div></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- PALCO CENTRAL: GLOBO -->
+          <div class="intel-stage">
             <div class="map-leaflet-wrap">
               <div id="threat-map" class="globe-container" aria-label="Globo de ataques"></div>
               <div class="map-overlays" aria-hidden="true">
-                <div class="radar"></div>
                 <div class="map-frame-corner tl"></div>
                 <div class="map-frame-corner tr"></div>
                 <div class="map-frame-corner bl"></div>
                 <div class="map-frame-corner br"></div>
-                <div class="map-hud-corner tl mono">WGS84 · SRC</div>
-                <div class="map-hud-corner br mono">CORREL · DST</div>
+                <div class="stage-hud tl mono" id="hud-center">LAT — // LON —</div>
+                <div class="stage-hud tr mono" id="hud-zoom">ZOOM 1.00x · ORTHO</div>
+                <div class="stage-hud bl mono" id="hud-scan">VARREDURA 360° · 0 ALVOS</div>
+                <div class="stage-hud br mono" id="hud-routes">ROTAS ATIVAS 00</div>
+                <div class="sim-banner mono" id="sim-banner" hidden>⚠ CONTÉM EVENTOS SIMULADOS (TESTE) · NÃO SÃO ATAQUES REAIS</div>
                 <div class="map-label" id="mapLabel" aria-live="polite">Aguardando ataques…</div>
               </div>
-              <aside class="attacker-card" id="attackerCard" aria-label="Origem do ataque" hidden>
-                <button class="attacker-close" id="ac-close" type="button" aria-label="Fechar">×</button>
-                <div class="attacker-kicker mono">ORIGEM DO ATAQUE</div>
-                <h3 class="attacker-city" id="ac-city"></h3>
-                <dl class="attacker-rows mono" id="ac-rows"></dl>
-                <iframe class="attacker-frame" id="ac-frame" title="Mapa da região de origem" loading="lazy" referrerpolicy="no-referrer"></iframe>
-                <a class="attacker-map-btn mono" id="ac-map" target="_blank" rel="noopener noreferrer">VER REGIÃO NO MAPA ↗</a>
-                <p class="attacker-note">Localização aproximada pelo IP (cidade/provedor). Não é o endereço do atacante.</p>
-              </aside>
-            </div>
-            <div class="attack-log">
-              <div class="attack-log-header mono">
-                <span>HORA</span><span>TIPO</span><span>DESCRIÇÃO</span><span>IP</span><span>PAÍS</span>
-              </div>
-              <div class="attack-log-body mono" id="alerts-feed"></div>
             </div>
           </div>
 
-          <!-- RIGHT: TOP IPs + DONUT -->
-          <div class="right-col">
-            <div class="panel top-ips-panel">
-              <div class="panel-header"><h2>TOP IP'S MALICIOSOS</h2></div>
+          <!-- COLUNA DIREITA -->
+          <div class="intel-col intel-right">
+            <div class="panel hud-panel target-panel">
+              <div class="panel-header"><h2>ALVO SELECIONADO</h2><span class="panel-code mono">TRACK.LOCK</span></div>
+              <div class="target-idle mono" id="target-idle">
+                <div class="target-idle-ring" aria-hidden="true"></div>
+                Nenhum alvo selecionado.<br>Clique num evento do feed, na linha do tempo ou num marcador do globo.
+              </div>
+              <aside class="attacker-card" id="attackerCard" aria-label="Origem do ataque" hidden>
+                <button class="attacker-close" id="ac-close" type="button" aria-label="Fechar">×</button>
+                <div class="attacker-kicker mono" id="ac-kicker">ORIGEM DO ATAQUE</div>
+                <div class="ac-ip mono" id="ac-ip"></div>
+                <h3 class="attacker-city" id="ac-city"></h3>
+                <div class="ac-badges mono" id="ac-badges"></div>
+                <div class="attacker-body">
+                  <dl class="attacker-rows mono" id="ac-rows"></dl>
+                  <iframe class="attacker-frame" id="ac-frame" title="Mapa da região de origem" loading="lazy" referrerpolicy="no-referrer"></iframe>
+                  <p class="attacker-map-empty mono" id="ac-map-empty" hidden>Mapa indisponível: este evento não informa coordenadas.</p>
+                </div>
+                <div class="attacker-footer">
+                  <button class="attacker-map-btn mono" id="ac-map" type="button">VER REGIÃO NO MAPA</button>
+                  <p class="attacker-note">Localização aproximada pelo IP (cidade/provedor). Não é o endereço do atacante.</p>
+                </div>
+              </aside>
+            </div>
+
+            <div class="panel hud-panel">
+              <div class="panel-header"><h2>HISTÓRICO DO ALVO</h2><span class="panel-code mono">SESSÃO</span></div>
+              <div class="intel-history mono" id="ac-history"><div class="empty-state">Selecione um alvo.</div></div>
+            </div>
+
+            <div class="panel hud-panel">
+              <div class="panel-header"><h2>ORIGENS RASTREADAS</h2><span class="panel-code mono">TOP.05</span></div>
               <div class="ips-list" id="ips-list"></div>
             </div>
-            <div class="panel donut-panel">
-              <div class="panel-header"><h2>DISTRIBUIÇÃO DE ATAQUES</h2></div>
-              <div class="donut-area">
-                <div class="donut-chart-wrap"><canvas id="socDonut" aria-label="Distribuição de tipos de ataque"></canvas></div>
-                <div class="donut-legend" id="donut-legend"></div>
-              </div>
+
+            <div class="panel hud-panel feed-panel">
+              <div class="panel-header"><h2>FEED DE EVENTOS</h2><span class="panel-code mono">SOCKET.IO</span></div>
+              <div class="attack-log-body mono" id="alerts-feed"><div class="empty-state">Aguardando eventos…</div></div>
             </div>
           </div>
         </div>
 
-        <div class="bottom-grid">
-          <div class="panel net-panel">
-            <div class="panel-header">
-              <h2>USO DE REDE</h2>
-              <div class="net-legend">
-                <span class="net-dot green"></span><span class="mono">RECEBIMENTO</span>
-                <span class="net-dot cyan"></span><span class="mono">ENVIO</span>
-              </div>
-            </div>
-            <div class="graph"><canvas id="networkChart"></canvas></div>
-          </div>
-          <div class="panel logs-panel">
-            <div class="panel-header">
-              <h2>LOGS RECENTES</h2>
-              <button type="button" class="btn-ver-todos mono" id="btn-clear-alerts">VER TODOS</button>
-            </div>
-            <div class="recent-logs mono" id="logs-container"></div>
-          </div>
+        <!-- LINHA DO TEMPO -->
+        <div class="intel-timeline mono">
+          <span class="tl-label">LINHA DO TEMPO</span>
+          <span class="tl-range">−30 MIN</span>
+          <div class="tl-track" id="intel-timeline" aria-label="Alertas dos últimos 30 minutos"></div>
+          <span class="tl-range">AGORA</span>
+          <span class="tl-stats">ALERTAS 30 MIN <b id="tl-count">0</b> · SIMULADOS <b id="tl-sim">0</b></span>
         </div>
       </section>
 
@@ -349,7 +257,7 @@
         </div>
         <div class="fw-kpi-row">
           <div class="mini-kpi"><div class="mini-kpi-val mono" id="fw-blocked">0</div><div class="mini-kpi-label">IPs Bloqueados</div></div>
-          <div class="mini-kpi"><div class="mini-kpi-val mono">7</div><div class="mini-kpi-label">Regras Ativas</div></div>
+          <div class="mini-kpi"><div class="mini-kpi-val mono">7</div><div class="mini-kpi-label">Regras (ilustrativas)</div></div>
           <div class="mini-kpi"><div class="mini-kpi-val mono green">ATIVO</div><div class="mini-kpi-label">Status</div></div>
           <div class="mini-kpi"><div class="mini-kpi-val mono" id="fw-threats">0</div><div class="mini-kpi-label">Ameaças Bloq.</div></div>
         </div>
@@ -361,7 +269,7 @@
             </div>
           </div>
           <div class="panel fw-rules-panel">
-            <div class="panel-header"><h2>REGRAS ATIVAS</h2></div>
+            <div class="panel-header"><h2>REGRAS ATIVAS</h2><span class="panel-code is-warn mono" title="Esta tabela é fixa no HTML; não é lida do netsh/iptables">ILUSTRATIVO · NÃO LIDO DO FIREWALL</span></div>
             <table class="fw-table mono">
               <thead><tr><th>ID</th><th>AÇÃO</th><th>ORIGEM</th><th>ALVO</th><th>STATUS</th><th>EVENTOS</th></tr></thead>
               <tbody>
@@ -438,7 +346,7 @@
         </div>
         <div class="config-grid">
           <div class="panel config-panel">
-            <div class="panel-header"><h2>SISTEMA</h2></div>
+            <div class="panel-header"><h2>SISTEMA</h2><span class="panel-code is-warn mono" title="Estes campos não são enviados ao servidor">NÃO PERSISTE</span></div>
             <div class="config-form">
               <div class="config-field">
                 <label class="config-label">Arquivo de Log</label>
@@ -463,7 +371,7 @@
             </div>
           </div>
           <div class="panel config-panel">
-            <div class="panel-header"><h2>ALERTAS E LIMIARES</h2></div>
+            <div class="panel-header"><h2>ALERTAS E LIMIARES</h2><span class="panel-code is-warn mono" title="Estes campos não são enviados ao servidor">NÃO PERSISTE</span></div>
             <div class="config-form">
               <div class="config-field">
                 <label class="config-label">Alerta de CPU (%)</label>

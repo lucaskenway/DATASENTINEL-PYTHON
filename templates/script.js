@@ -26,7 +26,12 @@ const state = {
   allLogLines:   [],
   netHistory:    { rx: [], tx: [] },
   connsHistory:  [],
+  /* Central de inteligencia: so eventos recebidos de verdade nesta sessao */
+  alertLog:      [],          /* [{ at: ms de recebimento, p: payload }], mais recente no fim */
+  ipSeen:        new Map(),   /* ip -> { first: ms, last: ms } */
+  sources:       new Map(),   /* fonte de deteccao -> { count, last } */
 };
+const ALERT_LOG_MAX = 500;
 
 /* ────────────────── CHART INSTANCES ────────────────── */
 let networkChart      = null;
@@ -48,6 +53,9 @@ const GLOBE_ZOOM_MIN   = 0.8;
 const GLOBE_ZOOM_MAX   = 3;
 const GLOBE_FOCUS_ZOOM = 1.6;
 const GLOBE_ARC_MS     = 6000;
+const ATTACK_LEAD_MS   = 1000;       /* mostra a origem antes do ataque sair */
+const ATTACK_TRAVEL_MS = 2400;       /* tempo do ataque viajando ate o alvo */
+const ATTACK_HOLD_MS   = 2600;       /* tempo parado no alvo mostrando o impacto */
 const GLOBE_PULSE_MS   = 2200;
 
 const globe = {
@@ -57,7 +65,8 @@ const globe = {
   sphere: { type: 'Sphere' }, graticule: null, land: null,
   rotation: [...GLOBE_HOME], zoom: 1,
   dragging: false, lastPointer: null, lastInteraction: 0,
-  tween: null, focusTimer: null,
+  tween: null, focusTimer: null, followTimers: [],
+  hold: false, highlight: null, selected: null,
   markers: [], arcs: [],
   colors: null, lastFrame: 0,
 };
@@ -79,7 +88,10 @@ function initGlobe() {
     return;
   }
 
-  globe.colors = { neon: cssVar('--neon'), neon2: cssVar('--neon2'), cyan: cssVar('--cyan') };
+  globe.colors = {
+    neon: cssVar('--neon'), neon2: cssVar('--neon2'),
+    cyan: cssVar('--cyan'), cyan2: cssVar('--cyan2'), warn2: cssVar('--warn2'),
+  };
 
   globe.canvas  = document.createElement('canvas');
   globe.canvas.className = 'globe-canvas';
@@ -99,7 +111,7 @@ function initGlobe() {
 
   fetch(GLOBE_LAND_URL, { integrity: GLOBE_LAND_SRI })
     .then(r => r.json())
-    .then(topo => { globe.land = topojson.feature(topo, topo.objects.land); })
+    .then(topo => { globe.land = topojson.feature(topo, topo.objects.land); buildLandDots(); })
     .catch(e => console.warn('Globe land data:', e));
 
   requestAnimationFrame(globeFrame);
@@ -116,8 +128,49 @@ function resizeGlobe() {
   globe.ctx.setTransform(globe.dpr, 0, 0, globe.dpr, 0, 0);
 }
 
+/* Raio sem zoom: os aneis do HUD ficam fixos na tela, como um instrumento */
+function globeBaseRadius() {
+  return Math.min(globe.width, globe.height) * 0.39;
+}
+
 function globeRadius() {
-  return Math.min(globe.width, globe.height) * 0.44 * globe.zoom;
+  return globeBaseRadius() * globe.zoom;
+}
+
+/* Continentes em matriz de pontos: rasteriza a terra numa projecao
+   equiretangular fora da tela e amostra os pixels. Roda uma vez so. */
+const LAND_DOT_STEP = 1.5;   /* graus entre pontos */
+function buildLandDots() {
+  if (!globe.land) return;
+  const W = 720, H = 360;
+  const off = document.createElement('canvas');
+  off.width = W; off.height = H;
+  const octx = off.getContext('2d', { willReadFrequently: true });
+  const proj = d3.geoEquirectangular().scale(W / (2 * Math.PI)).translate([W / 2, H / 2]);
+  octx.fillStyle = '#fff';
+  octx.beginPath(); d3.geoPath(proj, octx)(globe.land); octx.fill();
+  const px = octx.getImageData(0, 0, W, H).data;
+
+  const dots = [];
+  for (let lat = -84; lat <= 84; lat += LAND_DOT_STEP) {
+    /* Espacamento uniforme na esfera: mais graus de longitude perto dos polos */
+    const lonStep = LAND_DOT_STEP / Math.max(0.25, Math.cos(lat * Math.PI / 180));
+    for (let lon = -180; lon < 180; lon += lonStep) {
+      const [x, y] = proj([lon, lat]);
+      const ix = Math.min(W - 1, Math.max(0, Math.round(x)));
+      const iy = Math.min(H - 1, Math.max(0, Math.round(y)));
+      if (px[(iy * W + ix) * 4 + 3] > 128) dots.push(lon, lat);
+    }
+  }
+  /* Trigonometria pre-calculada: por frame so falta seno/cosseno da longitude */
+  const n = dots.length / 2;
+  const lam = new Float32Array(n), sinPhi = new Float32Array(n), cosPhi = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    lam[i] = dots[2 * i] * Math.PI / 180;
+    const phi = dots[2 * i + 1] * Math.PI / 180;
+    sinPhi[i] = Math.sin(phi); cosPhi[i] = Math.cos(phi);
+  }
+  globe.landDots = { n, lam, sinPhi, cosPhi };
 }
 
 function syncProjections() {
@@ -214,8 +267,9 @@ function updateGlobeTooltip(e) {
 
 function addGlobeMarker(lat, lon, meta) {
   if (!globe.canvas) return;
-  const sev = meta.severity || 'high';
-  const color = sev === 'high' ? '#ff4d6d' : sev === 'medium' ? '#ffcc66' : '#66d9ff';
+  /* Ciano = evento real; amarelo = evento de teste (simulado), nunca confundidos */
+  const c = globe.colors;
+  const color = meta.alert && isSimulatedEvent(meta.alert) ? c.warn2 : c.cyan;
   const now = performance.now();
   globe.markers.push({ lat, lon, color, ip: meta.ip, location: meta.location, alert: meta.alert, born: now, expires: now + MARKER_LIFETIME_MS });
 }
@@ -227,58 +281,254 @@ function placeName(p) {
   return unique.length ? unique.join(', ') : (p.location || 'Desconhecido');
 }
 
+/* Alvo do ataque: usa target_* do alerta; sem isso, cai no defensor padrao */
+function attackTarget(p) {
+  if (p.target_lat != null && p.target_lon != null) {
+    return { lat: p.target_lat, lon: p.target_lon, ip: p.target_ip || '', name: p.target_city || p.target_location || '' };
+  }
+  return { lat: state.defender.lat, lon: state.defender.lon, ip: p.target_ip || '', name: '' };
+}
+
+function targetLabel(p) {
+  const t = attackTarget(p);
+  return [t.name, t.ip && `(${t.ip})`].filter(Boolean).join(' ');
+}
+
+/* Coordenadas do evento, ou null se faltarem / forem invalidas.
+   Nunca inventa uma posicao: sem lat/lon validos, nao ha local no mapa. */
+function eventCoords(p) {
+  if (!p || p.lat == null || p.lon == null || p.lat === '' || p.lon === '') return null;
+  const lat = Number(p.lat), lon = Number(p.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
+  return { lat, lon };
+}
+
+/* Texto seguro para a interface: nada de "undefined", "null" ou "[object Object]" */
+function displayText(v) {
+  if (v == null) return '';
+  if (typeof v === 'string') return v.trim();
+  if (typeof v === 'number') return Number.isFinite(v) ? String(v) : '';
+  return '';
+}
+
+/* Eventos de teste (POST /test_alert manda reason "test_endpoint" e mensagem
+   "TESTE manual") nunca podem parecer ataques reais na interface. */
+function isSimulatedEvent(p) {
+  const msg = displayText(p.message);
+  return /^(SIMULATED|TESTE)\b/i.test(msg)
+    || p.reason === 'manual_test' || p.reason === 'test_endpoint' || p.type === 'test_event';
+}
+
+const UNAVAILABLE = 'Indisponível';
+
 /* Cartao com a origem APROXIMADA do ataque (geolocalizacao por IP indica a
    cidade/provedor, nunca o endereco de quem esta atras do IP). */
 function showAttackerCard(p) {
   const card = document.getElementById('attackerCard');
-  if (!card || p.lat == null || p.lon == null) return;
+  if (!card || !p) return;
+  globe.selected = p;
+  const coords = eventCoords(p);
 
-  document.getElementById('ac-city').textContent = p.city || p.location || 'Local desconhecido';
+  const simulated = isSimulatedEvent(p);
+  const ip = displayText(p.ip);
+  document.getElementById('ac-city').textContent =
+    displayText(p.city) || displayText(p.location) || 'Localização indisponível';
+  document.getElementById('ac-kicker').textContent =
+    simulated ? 'ORIGEM DO ATAQUE · SIMULADO' : 'ORIGEM DO ATAQUE';
+  setText('ac-ip', ip || 'IP indisponível');
 
-  const when = p.timestamp ? new Date(p.timestamp * 1000).toLocaleString('pt-BR') : '—';
+  const type = attackTypeFromPayload(p);
+  const badges = document.getElementById('ac-badges');
+  if (badges) {
+    badges.replaceChildren();
+    const chips = [
+      [type, `chip-type ${badgeClass(type)}`],
+      simulated ? ['SIMULADO', 'chip-sim'] : ['BLOQUEIO SOLICITADO', 'chip-fw'],
+      [sourceLabel(p).short, 'chip-src'],
+    ];
+    for (const [text, cls] of chips) {
+      const s = document.createElement('span');
+      s.className = `ac-chip ${cls}`;
+      s.textContent = text;
+      badges.append(s);
+    }
+  }
+
+  const when = Number.isFinite(Number(p.timestamp)) && p.timestamp != null
+    ? new Date(Number(p.timestamp) * 1000).toLocaleString('pt-BR') : '';
+  const place = [p.city, p.region, p.country].map(displayText).filter(Boolean);
+  const seen = state.ipSeen.get(ip);
+  const hhmm = ms => new Date(ms).toLocaleTimeString('pt-BR');
+  /* [rotulo, valor, obrigatorio]: obrigatorios mostram "Indisponivel" quando faltam.
+     Porta e severidade nao sao enviadas pelos monitores hoje: ficam
+     "Indisponivel" em vez de um valor inventado. */
   const rows = [
-    ['IP', p.ip],
-    ['Local', placeName(p)],
-    ['Provedor', p.isp],
-    ['Organização', p.org && p.org !== p.isp ? p.org : null],
-    ['Ataque', attackTypeFromPayload(p)],
-    ['Horário', when],
-    ['Coord. aprox.', `${(+p.lat).toFixed(3)}, ${(+p.lon).toFixed(3)}`],
+    ['Local', place.filter((v, i) => place.indexOf(v) === i).join(', ') || displayText(p.location), true],
+    ['Origem → Destino', `${displayText(p.city) || displayText(p.location) || ip || '?'} → ${targetLabel(p) || 'SENSOR'}`, true],
+    ['Tipo', type, true],
+    ['Portas', displayText(p.port ?? p.dest_port), true],
+    ['Severidade', displayText(p.severity), true],
+    ['Ocorrências', ip && state.ipHits.get(ip) ? `${state.ipHits.get(ip)} nesta sessão` : '', true],
+    ['Primeira / Última', seen ? `${hhmm(seen.first)} / ${hhmm(seen.last)}` : '', true],
+    ['Fonte', sourceLabel(p).long, true],
+    ['Firewall', simulated ? 'Não aplicado (evento de teste)' : 'block_ip() acionado pelo monitor', true],
+    ['Provedor', displayText(p.isp), false],
+    ['Organização', displayText(p.org) !== displayText(p.isp) ? displayText(p.org) : '', false],
+    ['Horário', when, true],
+    ['Coordenadas', coords ? `${coords.lat.toFixed(3)}, ${coords.lon.toFixed(3)} (aprox.)` : '', true],
+    ['Descrição', displayText(p.message), false],
   ];
   const dl = document.getElementById('ac-rows');
   dl.replaceChildren();
-  for (const [k, v] of rows) {
-    if (!v) continue;
+  for (const [k, v, required] of rows) {
+    if (!v && !required) continue;
     const dt = document.createElement('dt'); dt.textContent = k;
-    const dd = document.createElement('dd'); dd.textContent = v;
+    const dd = document.createElement('dd'); dd.textContent = v || UNAVAILABLE;
+    if (!v) dd.classList.add('is-missing');
     dl.append(dt, dd);
   }
 
-  const lat = +p.lat, lon = +p.lon, d = 0.06;
-  const bbox = [lon - d, lat - d, lon + d, lat + d].map(n => n.toFixed(4)).join(',');
-  document.getElementById('ac-frame').src =
-    `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat},${lon}`;
-  document.getElementById('ac-map').href =
-    `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=12/${lat}/${lon}`;
+  /* Mapa menor e botao sempre refletem o evento selecionado */
+  const frame = document.getElementById('ac-frame');
+  const empty = document.getElementById('ac-map-empty');
+  const btn = document.getElementById('ac-map');
+  if (coords) {
+    const d = 0.06;
+    const bbox = [coords.lon - d, coords.lat - d, coords.lon + d, coords.lat + d].map(n => n.toFixed(4)).join(',');
+    frame.src = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${coords.lat},${coords.lon}`;
+    frame.hidden = false;
+    empty.hidden = true;
+  } else {
+    frame.src = 'about:blank';
+    frame.hidden = true;
+    empty.hidden = false;
+  }
+  btn.disabled = !coords;
+  btn.title = coords ? 'Centraliza o globo nesta localização' : 'Este evento não tem coordenadas';
+  btn.onclick = () => focusGlobeOnEvent(p);
 
+  document.querySelectorAll('.attack-row.is-selected').forEach(r => r.classList.remove('is-selected'));
+  document.querySelectorAll('.attack-row').forEach(r => { if (r._alert === p) r.classList.add('is-selected'); });
+
+  const idle = document.getElementById('target-idle');
+  if (idle) idle.hidden = true;
   card.hidden = false;
+  /* Reinicia a animacao de "travar alvo" a cada nova selecao */
+  card.classList.remove('is-locking');
+  void card.offsetWidth;
+  card.classList.add('is-locking');
+  renderTargetHistory(ip);
+  renderTimeline();
 }
 
 function hideAttackerCard() {
   const card = document.getElementById('attackerCard');
   if (!card) return;
   card.hidden = true;
+  const idle = document.getElementById('target-idle');
+  if (idle) idle.hidden = false;
   document.getElementById('ac-frame').src = 'about:blank';
+  document.querySelectorAll('.attack-row.is-selected').forEach(r => r.classList.remove('is-selected'));
+  globe.selected = null;
+  renderTargetHistory(null);
+  renderTimeline();
+  /* Solta o globo preso na regiao e volta a girar */
+  if (globe.hold) {
+    globe.hold = false;
+    globe.highlight = null;
+    animateGlobeTo([globe.rotation[0], GLOBE_HOME[1]], 1, 1800);
+  }
 }
 
-function addGlobeArc(fromLat, fromLon, toLat, toLon, severity) {
+/* Botao "VER REGIAO NO MAPA": gira o globo existente ate o evento, sem sair
+   da pagina. Fica preso na regiao enquanto o cartao estiver aberto. */
+function focusGlobeOnEvent(p) {
+  const coords = eventCoords(p);
+  if (!coords) {
+    showMapLabel('Coordenadas indisponíveis para este evento', 4000);
+    return false;
+  }
+  if (!globe.canvas) return false;
+
+  globe.followTimers.forEach(clearTimeout);
+  globe.followTimers = [];
+  if (globe.focusTimer) { clearTimeout(globe.focusTimer); globe.focusTimer = null; }
+  globe.hold = true;
+
+  /* Duracao proporcional ao giro: perto = rapido, outro lado do mundo = mais lento */
+  const center = [-globe.rotation[0], -globe.rotation[1]];
+  const dist = d3.geoDistance(center, [coords.lon, coords.lat]);
+  animateGlobeTo([-coords.lon, -coords.lat], GLOBE_FOCUS_ZOOM, 700 + dist / Math.PI * 1100);
+
+  /* Destaca o marcador do evento; se ja expirou, recoloca no lugar exato */
+  let marker = globe.markers.find(m => m.alert === p)
+    || globe.markers.find(m => m.ip === p.ip && m.lat === coords.lat && m.lon === coords.lon);
+  if (!marker) {
+    addGlobeMarker(coords.lat, coords.lon, { ip: p.ip, location: p.location, severity: 'high', alert: p });
+    marker = globe.markers[globe.markers.length - 1];
+  }
+  globe.highlight = { marker, born: performance.now() };
+
+  showMapLabel(`${placeName(p)} · ${coords.lat.toFixed(3)}, ${coords.lon.toFixed(3)}`, 6000);
+  return true;
+}
+
+function addGlobeArc(fromLat, fromLon, toLat, toLon, severity, opts = {}) {
   if (!globe.canvas) return;
-  const color = severity === 'high' ? '#ff5577' : severity === 'medium' ? '#ffd27a' : '#8ee7ff';
+  const color = opts.simulated ? globe.colors.warn2 : globe.colors.neon;
+  const now = performance.now();
+  const delay  = opts.delay  ?? 0;
+  const travel = opts.travel ?? 1000;
+  const hold   = opts.hold   ?? GLOBE_ARC_MS - 1000;
   globe.arcs.push({
+    from: [fromLon, fromLat], to: [toLon, toLat],
     interp: d3.geoInterpolate([fromLon, fromLat], [toLon, toLat]),
     dist: d3.geoDistance([fromLon, fromLat], [toLon, toLat]),
-    color, born: performance.now(),
+    fromName: opts.fromName || '', toName: opts.toName || '',
+    color, born: now, start: now + delay, travel, life: delay + travel + hold,
   });
+}
+
+function easeInOutCubic(t) {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+/* Mostra o ataque inteiro: foca na origem, a camera acompanha o ataque
+   viajando ate o alvo, segura no impacto e depois volta a girar. */
+function showAttackOnGlobe(payload) {
+  if (!globe.canvas) return;
+  const lat = payload.lat, lon = payload.lon;
+  const target = attackTarget(payload);
+  const sev = 'high';
+  const fromName = `ORIGEM · ${payload.city || payload.location || payload.ip || ''}`;
+  /* Sem alvo proprio o ataque vai ao sensor, que ja tem a sua etiqueta */
+  const toLabel = [target.name, target.ip].filter(Boolean).join(' · ');
+  const toName = toLabel ? `ALVO · ${toLabel}` : '';
+
+  addGlobeMarker(lat, lon, { ip: payload.ip, location: payload.location, severity: sev, alert: payload });
+  addGlobeArc(lat, lon, target.lat, target.lon, sev, {
+    delay: ATTACK_LEAD_MS, travel: ATTACK_TRAVEL_MS, hold: ATTACK_HOLD_MS, fromName, toName,
+    simulated: isSimulatedEvent(payload),
+  });
+
+  /* Com uma regiao fixada pelo usuario, o ataque e desenhado mas a camera fica onde esta */
+  if (globe.hold) return;
+
+  /* Ataques longos pedem menos zoom para caber origem e alvo na tela */
+  const dist = d3.geoDistance([lon, lat], [target.lon, target.lat]);
+  const zoom = Math.max(1, Math.min(GLOBE_FOCUS_ZOOM, GLOBE_FOCUS_ZOOM - dist * 0.25));
+
+  globe.followTimers.forEach(clearTimeout);
+  if (globe.focusTimer) clearTimeout(globe.focusTimer);
+  animateGlobeTo([-lon, -lat], zoom, ATTACK_LEAD_MS);
+  globe.followTimers = [
+    setTimeout(() => animateGlobeTo([-target.lon, -target.lat], zoom, ATTACK_TRAVEL_MS), ATTACK_LEAD_MS),
+  ];
+  globe.focusTimer = setTimeout(() => {
+    globe.focusTimer = null;
+    animateGlobeTo([globe.rotation[0], GLOBE_HOME[1]], 1, 1800);
+  }, ATTACK_LEAD_MS + ATTACK_TRAVEL_MS + ATTACK_HOLD_MS);
 }
 
 /* Interpola rotacao (caminho mais curto em longitude) e zoom */
@@ -293,7 +543,8 @@ function animateGlobeTo(rotation, zoom, ms) {
 }
 
 function focusMapOn(lat, lon, holdMs = 4000) {
-  if (!globe.canvas) return;
+  if (!globe.canvas || globe.hold) return;
+  globe.followTimers.forEach(clearTimeout);
   animateGlobeTo([-lon, -lat], GLOBE_FOCUS_ZOOM, 1200);
   if (globe.focusTimer) clearTimeout(globe.focusTimer);
   globe.focusTimer = setTimeout(() => {
@@ -318,12 +569,12 @@ function globeFrame(now) {
     globe.rotation = [from[0] + (to[0] - from[0]) * e, from[1] + (to[1] - from[1]) * e];
     globe.zoom = globe.tween.fromZoom + (globe.tween.toZoom - globe.tween.fromZoom) * e;
     if (t >= 1) globe.tween = null;
-  } else if (!globe.dragging && !globe.focusTimer && now - globe.lastInteraction > GLOBE_IDLE_MS) {
+  } else if (!globe.dragging && !globe.focusTimer && !globe.hold && now - globe.lastInteraction > GLOBE_IDLE_MS) {
     globe.rotation[0] += GLOBE_SPIN_DEG_S * dt / 1000;
   }
 
   globe.markers = globe.markers.filter(m => m.expires > now);
-  globe.arcs    = globe.arcs.filter(a => now - a.born < GLOBE_ARC_MS);
+  globe.arcs    = globe.arcs.filter(a => now - a.born < a.life);
 
   syncProjections();
   drawGlobe(now);
@@ -334,6 +585,8 @@ function drawGlobe(now) {
   const cx = w / 2, cy = h / 2, r = globeRadius();
   ctx.clearRect(0, 0, w, h);
 
+  drawHudRings(now, cx, cy);
+
   /* Halo externo */
   const halo = ctx.createRadialGradient(cx, cy, r * 0.92, cx, cy, r * 1.22);
   halo.addColorStop(0, withAlpha(c.neon, 0.16));
@@ -341,10 +594,11 @@ function drawGlobe(now) {
   ctx.fillStyle = halo;
   ctx.beginPath(); ctx.arc(cx, cy, r * 1.22, 0, Math.PI * 2); ctx.fill();
 
-  /* Corpo da esfera */
+  /* Corpo da esfera: luz vinda de cima/esquerda, borda escura (profundidade) */
   const body = ctx.createRadialGradient(cx - r * 0.35, cy - r * 0.4, r * 0.05, cx, cy, r);
-  body.addColorStop(0, withAlpha(c.cyan, 0.10));
-  body.addColorStop(1, withAlpha(c.neon, 0.02));
+  body.addColorStop(0, withAlpha(c.cyan, 0.12));
+  body.addColorStop(0.7, withAlpha(c.neon, 0.03));
+  body.addColorStop(1, 'rgba(0,0,0,0.35)');
   ctx.fillStyle = body;
   ctx.beginPath(); globe.path(globe.sphere); ctx.fill();
 
@@ -353,32 +607,35 @@ function drawGlobe(now) {
   ctx.strokeStyle = withAlpha(c.neon, 0.05);
   ctx.beginPath(); globe.backPath(globe.graticule); ctx.stroke();
   if (globe.land) {
-    ctx.strokeStyle = withAlpha(c.neon, 0.10);
+    ctx.strokeStyle = withAlpha(c.neon, 0.08);
     ctx.beginPath(); globe.backPath(globe.land); ctx.stroke();
   }
 
   /* Grade de latitude/longitude */
-  ctx.strokeStyle = withAlpha(c.neon, 0.16);
+  ctx.strokeStyle = withAlpha(c.neon, 0.13);
   ctx.lineWidth = 0.6;
   ctx.beginPath(); globe.path(globe.graticule); ctx.stroke();
 
-  /* Continentes */
+  /* Continentes: preenchimento leve + matriz de pontos + litoral brilhante */
   if (globe.land) {
-    ctx.fillStyle = withAlpha(c.neon, 0.13);
+    /* Um so path para preenchimento e litoral: projetar a terra custa caro */
+    ctx.fillStyle = withAlpha(c.neon, 0.06);
     ctx.beginPath(); globe.path(globe.land); ctx.fill();
     ctx.save();
-    ctx.shadowColor = withAlpha(c.neon, 0.7);
-    ctx.shadowBlur = 6;
-    ctx.strokeStyle = withAlpha(c.neon2, 0.6);
-    ctx.lineWidth = 0.8;
+    ctx.shadowColor = withAlpha(c.neon, 0.8);
+    ctx.shadowBlur = 8;
+    ctx.strokeStyle = withAlpha(c.neon2, 0.75);
+    ctx.lineWidth = 0.9;
     ctx.stroke();
     ctx.restore();
+    drawLandDots();
   }
 
-  /* Linhas de varredura + faixa de scan, recortadas na esfera */
+  /* Radar + linhas de varredura + faixa de scan, recortados na esfera */
   ctx.save();
   ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.clip();
-  ctx.fillStyle = withAlpha(c.neon, 0.035);
+  drawRadarSweep(now, cx, cy, r);
+  ctx.fillStyle = withAlpha(c.neon, 0.03);
   for (let y = cy - r; y < cy + r; y += 3) ctx.fillRect(cx - r, y, r * 2, 1);
   const bandY = cy - r + ((now / 4000) % 1) * r * 2;
   const band = ctx.createLinearGradient(0, bandY - 24, 0, bandY + 24);
@@ -392,33 +649,352 @@ function drawGlobe(now) {
   /* Borda (efeito fresnel) */
   const rim = ctx.createRadialGradient(cx, cy, r * 0.78, cx, cy, r);
   rim.addColorStop(0, withAlpha(c.cyan, 0));
-  rim.addColorStop(1, withAlpha(c.cyan, 0.16));
+  rim.addColorStop(1, withAlpha(c.cyan, 0.18));
   ctx.fillStyle = rim;
   ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = withAlpha(c.neon, 0.45);
+  ctx.strokeStyle = withAlpha(c.neon, 0.5);
   ctx.lineWidth = 1.2;
   ctx.stroke();
 
+  drawGlobeRoutes(now, cx, cy, r);
   drawGlobeArcs(now, cx, cy, r);
   drawGlobeMarkers(now);
+  drawSensor(now);
+  drawGlobeCallouts();
 }
 
-/* Arcos elevados de grande circulo, origem -> defensor */
+/* Aneis de instrumento ao redor do globo: fixos na tela (nao seguem o zoom) */
+function drawHudRings(now, cx, cy) {
+  const { ctx, colors: c } = globe;
+  const R = globeBaseRadius();
+  const TAU = Math.PI * 2;
+  ctx.save();
+
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = withAlpha(c.neon, 0.2);
+  ctx.beginPath(); ctx.arc(cx, cy, R * 1.06, 0, TAU); ctx.stroke();
+
+  /* Escala de graus: traco longo a cada 30, medio a cada 15, curto a cada 3 */
+  const tr = R * 1.1;
+  ctx.beginPath();
+  for (let i = 0; i < 120; i++) {
+    const a = i / 120 * TAU;
+    const len = i % 10 === 0 ? 10 : i % 5 === 0 ? 6 : 2.5;
+    ctx.moveTo(cx + Math.cos(a) * tr, cy + Math.sin(a) * tr);
+    ctx.lineTo(cx + Math.cos(a) * (tr + len), cy + Math.sin(a) * (tr + len));
+  }
+  ctx.strokeStyle = withAlpha(c.neon, 0.32);
+  ctx.stroke();
+
+  /* Segmentos girando em sentidos opostos */
+  const rot = now / 9000 * TAU;
+  ctx.lineWidth = 2.2;
+  ctx.strokeStyle = withAlpha(c.cyan, 0.5);
+  for (let k = 0; k < 4; k++) {
+    ctx.beginPath(); ctx.arc(cx, cy, R * 1.17, rot + k * Math.PI / 2, rot + k * Math.PI / 2 + 0.5); ctx.stroke();
+  }
+  ctx.lineWidth = 1;
+  ctx.setLineDash([2, 7]);
+  ctx.strokeStyle = withAlpha(c.neon, 0.28);
+  ctx.beginPath(); ctx.arc(cx, cy, R * 1.21, -rot * 0.6, -rot * 0.6 + TAU * 0.78); ctx.stroke();
+  ctx.setLineDash([]);
+
+  /* Mira: tracos nos quatro pontos cardeais */
+  ctx.strokeStyle = withAlpha(c.cyan, 0.3);
+  ctx.beginPath();
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    ctx.moveTo(cx + dx * R * 1.23, cy + dy * R * 1.23);
+    ctx.lineTo(cx + dx * R * 1.29, cy + dy * R * 1.29);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+/* Varredura de radar: feixe girando com rastro (conic gradient) */
+function drawRadarSweep(now, cx, cy, r) {
+  const { ctx, colors: c } = globe;
+  if (!ctx.createConicGradient) return;   /* navegador antigo: sem o feixe */
+  const a = (now / 5200) % 1 * Math.PI * 2;
+  const g = ctx.createConicGradient(a, cx, cy);
+  g.addColorStop(0, withAlpha(c.neon, 0));
+  g.addColorStop(0.86, withAlpha(c.neon, 0));
+  g.addColorStop(0.985, withAlpha(c.neon, 0.13));
+  g.addColorStop(1, withAlpha(c.neon, 0.22));
+  ctx.fillStyle = g;
+  ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+  ctx.strokeStyle = withAlpha(c.neon, 0.4);
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r); ctx.stroke();
+}
+
+/* Pontos dos continentes, mais fortes no centro do disco (profundidade) */
+/* Projecao ortografica direta (mesma de d3.geoOrthographic com rotate
+   [lambda, phi]): x = R cos(lat) sin(dLon); y = R (cos(lat0) sin(lat) - sin(lat0) cos(lat) cos(dLon)) */
+function drawLandDots() {
+  const dots = globe.landDots;
+  if (!dots) return;
+  const { ctx, colors: c } = globe;
+  const R = globeRadius(), cx = globe.width / 2, cy = globe.height / 2;
+  const lam0 = -globe.rotation[0] * Math.PI / 180, phi0 = -globe.rotation[1] * Math.PI / 180;
+  const sin0 = Math.sin(phi0), cos0 = Math.cos(phi0);
+  const size = Math.max(1.3, 1.5 * Math.sqrt(globe.zoom));
+  const half = size / 2;
+  const buckets = [[], [], []];
+  const { n, lam, sinPhi, cosPhi } = dots;
+  for (let i = 0; i < n; i++) {
+    const dl = lam[i] - lam0;
+    const cosDl = Math.cos(dl);
+    /* cos da distancia angular ao centro do disco: <= 0 = lado de tras */
+    const cosC = sin0 * sinPhi[i] + cos0 * cosPhi[i] * cosDl;
+    if (cosC <= 0) continue;
+    const x = cx + R * cosPhi[i] * Math.sin(dl);
+    const y = cy - R * (cos0 * sinPhi[i] - sin0 * cosPhi[i] * cosDl);
+    buckets[cosC > 0.73 ? 0 : cosC > 0.36 ? 1 : 2].push(x, y);
+  }
+  const alphas = [0.8, 0.5, 0.25];
+  buckets.forEach((pts, b) => {
+    ctx.fillStyle = withAlpha(c.neon, alphas[b]);
+    ctx.beginPath();
+    for (let i = 0; i < pts.length; i += 2) ctx.rect(pts[i] - half, pts[i + 1] - half, size, size);
+    ctx.fill();
+  });
+}
+
+/* Pontos de um grande circulo elevado (origem -> alvo); null = escondido atras do globo */
+function routePoints(interp, dist, cx, cy, r, upTo = 1, steps = 48) {
+  const center = [-globe.rotation[0], -globe.rotation[1]];
+  const lift = 0.05 + dist * 0.12;
+  const pts = [];
+  for (let i = 0; i <= Math.floor(steps * upTo); i++) {
+    const t = i / steps;
+    const p = interp(t);
+    const k = 1 + lift * Math.sin(Math.PI * t);
+    const [x, y] = globe.front(p);
+    const px = cx + (x - cx) * k, py = cy + (y - cy) * k;
+    const visible = d3.geoDistance(p, center) < Math.PI / 2 || Math.hypot(px - cx, py - cy) > r;
+    pts.push(visible ? [px, py] : null);
+  }
+  return pts;
+}
+
+function strokeRoute(pts) {
+  const { ctx } = globe;
+  ctx.beginPath();
+  let pen = false;
+  for (const q of pts) {
+    if (q) { pen ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]); pen = true; }
+    else pen = false;
+  }
+  ctx.stroke();
+}
+
+/* Rotas de rastreamento persistentes: cada origem ativa ligada ao seu alvo
+   enquanto o marcador existir. A rota do alvo selecionado fica solida. */
+const GLOBE_MAX_ROUTES = 40;
+function drawGlobeRoutes(now, cx, cy, r) {
+  const { ctx, colors: c } = globe;
+  const byAlert = new Map();
+  for (const m of globe.markers) if (m.alert && eventCoords(m.alert)) byAlert.set(m.alert, m);
+  const live = [...byAlert.values()].slice(-GLOBE_MAX_ROUTES);
+  globe.routeCount = live.length;
+  ctx.save();
+  for (const m of live) {
+    if (!m.route) {
+      const t = attackTarget(m.alert);
+      const from = [m.lon, m.lat], to = [t.lon, t.lat];
+      m.route = { interp: d3.geoInterpolate(from, to), dist: d3.geoDistance(from, to) };
+    }
+    if (m.route.dist < 1e-4) continue;   /* origem no proprio sensor: sem rota */
+    const pts = routePoints(m.route.interp, m.route.dist, cx, cy, r);
+    const selected = globe.selected === m.alert;
+    if (selected) {
+      ctx.setLineDash([]);
+      ctx.shadowColor = c.neon;
+      ctx.shadowBlur = 10;
+      ctx.strokeStyle = withAlpha(c.neon, 0.95);
+      ctx.lineWidth = 1.8;
+    } else {
+      ctx.setLineDash([5, 5]);
+      ctx.lineDashOffset = -now / 45;
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = withAlpha(m.color, 0.45);
+      ctx.lineWidth = 1;
+    }
+    strokeRoute(pts);
+  }
+  ctx.restore();
+}
+
+/* Sensor (defensor): onde os ataques chegam. Coordenadas de /api/metrics. */
+function drawSensor(now) {
+  const d = state.defender;
+  if (!d || !globeVisible(d.lon, d.lat)) return;
+  const { ctx, colors: c } = globe;
+  const [x, y] = globe.front([d.lon, d.lat]);
+  ctx.save();
+  ctx.strokeStyle = c.neon;
+  for (let k = 0; k < 3; k++) {
+    const phase = ((now / 2600) + k / 3) % 1;
+    ctx.globalAlpha = 0.55 * (1 - phase);
+    ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(x, y, 8 + phase * 36, 0, Math.PI * 2); ctx.stroke();
+  }
+  ctx.globalAlpha = 0.95;
+  ctx.lineWidth = 1.5;
+  ctx.shadowColor = c.neon;
+  ctx.shadowBlur = 10;
+  ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI * 2); ctx.stroke();
+  ctx.setLineDash([3, 4]);
+  ctx.beginPath(); ctx.arc(x, y, 14, now / 900, now / 900 + Math.PI * 1.5); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = c.neon;
+  ctx.beginPath(); ctx.arc(x, y, 2.5, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  drawGlobeLabel(x + 6, y + 10, 'SENSOR // DEFENSOR', c.neon, 0.95, true);
+}
+
+/* Etiquetas de rastreamento (IP + tipo) com linha guia, como num painel de
+   inteligencia. Ate 7 alvos, o selecionado primeiro; sem sobreposicao. */
+const GLOBE_MAX_CALLOUTS = 7;
+function drawGlobeCallouts() {
+  const { ctx, colors: c } = globe;
+  const cx = globe.width / 2;
+  const list = globe.markers.filter(m => m.alert && globeVisible(m.lon, m.lat)).reverse();
+  const sel = list.findIndex(m => m.alert === globe.selected);
+  if (sel > 0) list.unshift(...list.splice(sel, 1));
+  const placed = [];
+  const seenIps = new Set();
+  ctx.save();
+  for (const m of list) {
+    if (placed.length >= GLOBE_MAX_CALLOUTS) break;
+    if (seenIps.has(m.ip)) continue;
+    const [x, y] = globe.front([m.lon, m.lat]);
+    const ipText = m.ip || '';
+    const sub = `${attackTypeFromPayload(m.alert)}${isSimulatedEvent(m.alert) ? ' · SIMULADO' : ''}`;
+    ctx.font = '600 11px "JetBrains Mono", ui-monospace, monospace';
+    const wIp = ctx.measureText(ipText).width;
+    ctx.font = '9.5px "JetBrains Mono", ui-monospace, monospace';
+    const wSub = ctx.measureText(sub).width;
+    const tw = Math.max(wIp, wSub) + 6;
+    const dir = x > cx ? 1 : -1;
+    let box = null;
+    for (const dy of [-30, 30, -56, 56]) {
+      const lx = dir > 0 ? x + 22 : x - 22 - tw;
+      const cand = { x: lx, y: y + dy - 12, w: tw, h: 28 };
+      const off = cand.x < 4 || cand.x + cand.w > globe.width - 4 || cand.y < 4 || cand.y + cand.h > globe.height - 4;
+      if (!off && !placed.some(b => !(cand.x > b.x + b.w || cand.x + cand.w < b.x || cand.y > b.y + b.h || cand.y + cand.h < b.y))) {
+        box = cand; break;
+      }
+    }
+    if (!box) continue;
+    placed.push(box);
+    seenIps.add(m.ip);
+    const selected = m.alert === globe.selected;
+    const col = selected ? c.neon : m.color;
+    const lineY = box.y + 15;
+    const elbowX = dir > 0 ? box.x : box.x + box.w;
+    ctx.globalAlpha = selected ? 1 : 0.85;
+    ctx.strokeStyle = withAlpha(col, 0.7);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, y); ctx.lineTo(elbowX, lineY);
+    ctx.lineTo(dir > 0 ? box.x + box.w : box.x, lineY);
+    ctx.stroke();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+    ctx.textBaseline = 'alphabetic';
+    ctx.font = '600 11px "JetBrains Mono", ui-monospace, monospace';
+    ctx.strokeText(ipText, box.x + 3, lineY - 3);
+    ctx.fillStyle = col;
+    ctx.fillText(ipText, box.x + 3, lineY - 3);
+    ctx.font = '9.5px "JetBrains Mono", ui-monospace, monospace';
+    ctx.textBaseline = 'top';
+    ctx.strokeText(sub, box.x + 3, lineY + 3);
+    ctx.fillStyle = withAlpha(col, 0.75);
+    ctx.fillText(sub, box.x + 3, lineY + 3);
+  }
+  ctx.restore();
+}
+
+/* Nome da cidade escrito ao lado do ponto, com contorno escuro para ler */
+function drawGlobeLabel(x, y, text, color, alpha, below = false) {
+  if (!text) return;
+  const { ctx } = globe;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.font = '600 11px "JetBrains Mono", ui-monospace, monospace';
+  ctx.textBaseline = 'middle';
+  /* Origem acima do ponto, alvo abaixo: nao se sobrepoem quando sao vizinhos.
+     Perto da borda direita o texto vai para a esquerda do ponto. */
+  const w = ctx.measureText(text).width;
+  const tx = x + 10 + w > globe.width - 6 ? Math.max(6, x - 10 - w) : x + 10;
+  const ty = below ? y + 12 : y - 10;
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+  ctx.strokeText(text, tx, ty);
+  ctx.fillStyle = color;
+  ctx.fillText(text, tx, ty);
+  ctx.restore();
+}
+
+/* Arcos elevados de grande circulo, origem -> alvo */
 function drawGlobeArcs(now, cx, cy, r) {
   const { ctx } = globe;
   const center = [-globe.rotation[0], -globe.rotation[1]];
+  const targetColor = globe.colors.cyan || '#66d9ff';
   for (const a of globe.arcs) {
-    const age = now - a.born;
-    const grow = Math.min(1, age / 1000);
-    const alpha = 0.85 * (1 - age / GLOBE_ARC_MS);
+    const age = now - a.start;
+    const grow = easeInOutCubic(Math.max(0, Math.min(1, age / a.travel)));
+    /* Some aos poucos no ultimo segundo de vida */
+    const alpha = 0.95 * Math.max(0, Math.min(1, (a.life - (now - a.born)) / 1000));
     const lift = 0.05 + a.dist * 0.12;
-    const steps = 48;
-    ctx.strokeStyle = a.color;
-    ctx.globalAlpha = alpha;
-    ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    let pen = false, head = null;
-    for (let i = 0; i <= steps * grow; i++) {
+    const steps = 64;
+
+    /* Origem: nome da cidade */
+    if (globeVisible(a.from[0], a.from[1])) {
+      const [ox, oy] = globe.front(a.from);
+      drawGlobeLabel(ox, oy, a.fromName, a.color, alpha);
+    }
+
+    /* Alvo: mira girando + nome, desde o inicio, para ver para onde vai */
+    if (globeVisible(a.to[0], a.to[1])) {
+      const [tx, ty] = globe.front(a.to);
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = targetColor;
+      ctx.lineWidth = 1.4;
+      ctx.translate(tx, ty);
+      ctx.rotate(now / 600);
+      ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath();
+      for (const s of [[0, -12, 0, -5], [0, 5, 0, 12], [-12, 0, -5, 0], [5, 0, 12, 0]]) {
+        ctx.moveTo(s[0], s[1]); ctx.lineTo(s[2], s[3]);
+      }
+      ctx.stroke();
+      ctx.restore();
+
+      /* Impacto: ondas saindo do alvo quando o ataque chega */
+      if (age >= a.travel) {
+        const hit = age - a.travel;
+        for (let k = 0; k < 3; k++) {
+          const phase = ((hit + k * 300) % 900) / 900;
+          ctx.globalAlpha = alpha * (1 - phase);
+          ctx.strokeStyle = a.color;
+          ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(tx, ty, 6 + phase * 26, 0, Math.PI * 2); ctx.stroke();
+        }
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = a.color;
+        ctx.beginPath(); ctx.arc(tx, ty, 4, 0, Math.PI * 2); ctx.fill();
+      }
+      drawGlobeLabel(tx, ty, a.toName, targetColor, alpha, true);
+    }
+
+    if (age < 0) continue;
+
+    /* Linha percorrida ate agora */
+    const pts = [];
+    for (let i = 0; i <= Math.floor(steps * grow); i++) {
       const t = i / steps;
       const p = a.interp(t);
       const k = 1 + lift * Math.sin(Math.PI * t);
@@ -426,13 +1002,33 @@ function drawGlobeArcs(now, cx, cy, r) {
       const px = cx + (x - cx) * k, py = cy + (y - cy) * k;
       /* Visivel se esta na frente ou "sobe" alem da silhueta */
       const visible = d3.geoDistance(p, center) < Math.PI / 2 || Math.hypot(px - cx, py - cy) > r;
-      if (visible) { pen ? ctx.lineTo(px, py) : ctx.moveTo(px, py); pen = true; head = [px, py]; }
-      else pen = false;
+      pts.push(visible ? [px, py] : null);
     }
-    ctx.stroke();
+    const strokePts = (list, width, a2) => {
+      ctx.globalAlpha = a2;
+      ctx.lineWidth = width;
+      ctx.beginPath();
+      let pen = false;
+      for (const q of list) {
+        if (q) { pen ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]); pen = true; }
+        else pen = false;
+      }
+      ctx.stroke();
+    };
+    ctx.strokeStyle = a.color;
+    strokePts(pts, 1.4, alpha * 0.7);
+    /* Rastro brilhante logo atras da cabeca */
+    if (grow < 1) strokePts(pts.slice(-10), 3, alpha);
+
+    const head = pts[pts.length - 1];
     if (head && grow < 1) {
-      ctx.fillStyle = a.color;
-      ctx.beginPath(); ctx.arc(head[0], head[1], 2.2, 0, Math.PI * 2); ctx.fill();
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.shadowColor = a.color;
+      ctx.shadowBlur = 14;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.arc(head[0], head[1], 3.2, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
     }
   }
   ctx.globalAlpha = 1;
@@ -453,24 +1049,64 @@ function drawGlobeMarkers(now) {
     ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2); ctx.fill();
   }
   ctx.globalAlpha = 1;
+  drawGlobeHighlight(now);
+}
+
+/* Marcador escolhido em "VER REGIAO NO MAPA": pulso forte nos primeiros
+   segundos e depois um anel fixo enquanto a regiao estiver selecionada. */
+function drawGlobeHighlight(now) {
+  const h = globe.highlight;
+  if (!h || !globe.markers.includes(h.marker)) return;
+  const m = h.marker;
+  if (!globeVisible(m.lon, m.lat)) return;
+  const { ctx } = globe;
+  const [x, y] = globe.front([m.lon, m.lat]);
+  const age = now - h.born;
+  ctx.save();
+  ctx.strokeStyle = m.color;
+  ctx.shadowColor = m.color;
+  ctx.shadowBlur = 10;
+  if (age < 3600) {
+    for (let k = 0; k < 2; k++) {
+      const phase = ((age + k * 450) % 900) / 900;
+      ctx.globalAlpha = (1 - phase) * (1 - age / 3600);
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(x, y, 6 + phase * 30, 0, Math.PI * 2); ctx.stroke();
+    }
+  }
+  ctx.globalAlpha = 0.9;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(x, y, 9 + Math.sin(now / 300) * 1.5, 0, Math.PI * 2); ctx.stroke();
+  ctx.fillStyle = m.color;
+  ctx.beginPath(); ctx.arc(x, y, 4.5, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+/* Selecionar um evento da tabela: abre o cartao e, havendo coordenadas,
+   repete o ataque no globo. Sem coordenadas, mostra so o cartao. */
+function selectAlert(payload) {
+  if (eventCoords(payload)) { reshowAlertOnMap(payload); return; }
+  showSection('dash');
+  showAttackerCard(payload);
 }
 
 /* Redesenha no globo um alerta que ja tinha expirado (marcador removido apos MARKER_LIFETIME_MS) */
 function reshowAlertOnMap(payload) {
-  const lat = payload.lat, lon = payload.lon;
-  if (lat == null || lon == null) return;
+  if (!eventCoords(payload)) return;
 
   showSection('dash');
+  /* Nova selecao: solta a regiao fixada antes, para a camera seguir este ataque */
+  globe.hold = false;
+  globe.highlight = null;
+  /* Cartao atualizado na hora: o botao nunca age sobre o evento anterior */
+  showAttackerCard(payload);
 
   setTimeout(() => {
-    const defLat = state.defender.lat, defLon = state.defender.lon;
-    const sev = 'high';
-    addGlobeMarker(lat, lon, { ip: payload.ip, location: payload.location, severity: sev, alert: payload });
-    addGlobeArc(lat, lon, defLat, defLon, sev);
-    focusMapOn(lat, lon, 4000);
+    if (globe.selected !== payload) return;   /* outro evento foi escolhido no meio */
+    showAttackOnGlobe(payload);
     const type = attackTypeFromPayload(payload);
-    showMapLabel(`${placeName(payload)} · ${type}`, 5000);
-    showAttackerCard(payload);
+    const alvo = targetLabel(payload);
+    showMapLabel(`${placeName(payload)}${alvo ? ' → ' + alvo : ''} · ${type}`, 5000);
   }, 120);
 }
 
@@ -519,6 +1155,9 @@ function showSection(name) {
 function bindNavigation() {
   document.querySelectorAll('.menu li').forEach(li => {
     li.addEventListener('click', () => showSection(li.dataset.section));
+    li.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showSection(li.dataset.section); }
+    });
   });
 
   document.getElementById('btn-clear-alerts')?.addEventListener('click', () => {
@@ -579,6 +1218,7 @@ function attackTypeFromPayload(p) {
   if (t.includes('xss') || m.includes('xss')) return 'XSS ATTEMPT';
   if (t.includes('ddos') || m.includes('ddos')) return 'DDoS';
   if (t.includes('ssh') || m.includes('ssh')) return 'BRUTE FORCE';
+  if (t.includes('anomal') || m.includes('anomalia')) return 'ANOMALIA (IF)';
   return 'OUTROS';
 }
 
@@ -589,6 +1229,7 @@ function badgeClass(type) {
     'PORT SCAN':     'badge-portscan',
     'XSS ATTEMPT':   'badge-xss',
     'DDoS':          'badge-ddos',
+    'ANOMALIA (IF)': 'badge-portscan',
   };
   return map[type] || 'badge-outros';
 }
@@ -600,6 +1241,7 @@ function typeColor(type) {
     'PORT SCAN':     '#00d2ff',
     'XSS ATTEMPT':   '#4dff9a',
     'DDoS':          '#cc4dff',
+    'ANOMALIA (IF)': '#66e8ff',
     'OUTROS':        '#666',
   };
   return map[type] || '#666';
@@ -652,7 +1294,10 @@ function prependAlertCard(payload) {
   const country = payload.country || '';
   const now  = new Date();
   const time = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
-  const desc = payload.message ? payload.message.slice(0, 60) : `${type} de ${ip}`;
+  const alvo = targetLabel(payload);
+  const desc = alvo
+    ? `${payload.city || payload.location || ip} → ${alvo}`
+    : (payload.message ? payload.message.slice(0, 60) : `${type} de ${ip}`);
   const flag = flagEmoji(country);
 
   function makeRow() {
@@ -661,19 +1306,28 @@ function prependAlertCard(payload) {
     row.innerHTML = `
       <span class="row-time">${time}</span>
       <span><span class="badge ${badgeClass(type)}">${type}</span></span>
-      <span class="row-desc" title="Clique para mostrar novamente no mapa">${escHtml(desc)}</span>
+      <span class="row-desc">${escHtml(desc)}</span>
       <span class="row-ip">${escHtml(ip)}</span>
       <span class="row-flag">${flag}</span>
     `;
-    if (payload.lat != null && payload.lon != null) {
-      row.querySelector('.row-desc').addEventListener('click', () => reshowAlertOnMap(payload));
-    }
+    /* Descricao completa no tooltip (a coluna corta com reticencias) e
+       linha inteira selecionavel por mouse ou teclado */
+    const full = [desc, displayText(payload.message)].filter((v, i, a) => v && a.indexOf(v) === i).join('\n');
+    row.title = `${full}\nClique para ver os detalhes`;
+    row._alert = payload;
+    row.tabIndex = 0;
+    row.setAttribute('role', 'button');
+    row.addEventListener('click', () => selectAlert(payload));
+    row.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectAlert(payload); }
+    });
     return row;
   }
 
   /* Dashboard feed */
   const feed = document.getElementById('alerts-feed');
   if (feed) {
+    feed.querySelector('.empty-state')?.remove();
     feed.prepend(makeRow());
     while (feed.children.length > MAX_ATTACK_ROWS) feed.removeChild(feed.lastChild);
   }
@@ -926,9 +1580,10 @@ async function pollMetrics() {
     appendChartPoint(rx, tx);
     appendMiniTrend(d.network_activity ?? 0);
 
-    /* KPI counters */
+    /* KPI counters. "Tentativas detectadas" conta alertas (handleNewAlert);
+       conexoes TCP ativas vao so para o rodape. */
     const conns = d.connections_active ?? 0;
-    setText('metric-connections', conns);
+    setText('metric-connections', state.connectionsToday);
     setText('metric-threats', state.threatsTotal);
     setText('metric-unique-ips', state.ipsBlocked.size);
     setText('footer-conns', conns);
@@ -1108,12 +1763,14 @@ function refreshFirewallPage() {
 
   const el = document.getElementById('fw-ips-list');
   if (!el) return;
-  const sorted = [...state.ipHits.entries()].sort((a,b) => b[1] - a[1]);
+  const sorted = [...state.ipHits.entries()].filter(([ip]) => state.ipsBlocked.has(ip)).sort((a,b) => b[1] - a[1]);
   if (sorted.length === 0) { el.innerHTML = '<div class="empty-state">Nenhum IP bloqueado ainda…</div>'; return; }
   el.innerHTML = sorted.slice(0, 40).map(([ip, count]) => {
     const country = state.ipCountry.get(ip) || '—';
     const flag = flagEmoji(country);
-    const time = new Date().toLocaleTimeString('pt-BR');
+    /* Horario do ultimo alerta deste IP (antes mostrava a hora atual em todas as linhas) */
+    const seen = state.ipSeen.get(ip);
+    const time = seen ? new Date(seen.last).toLocaleTimeString('pt-BR') : '—';
     return `<div class="fw-ip-row">
       <span style="font-size:14px">${flag}</span>
       <span class="fw-ip-addr">${escHtml(ip)}</span>
@@ -1123,22 +1780,193 @@ function refreshFirewallPage() {
   }).join('');
 }
 
+/* ────────────────── CENTRAL DE INTELIGENCIA ────────────────── */
+/* Todos os paineis abaixo leem so state.alertLog (alertas recebidos via
+   Socket.IO nesta sessao) e /api/metrics. Nada e inventado para preencher a
+   tela: sem eventos, o painel diz que nao ha eventos. */
+
+const INTEL_SOURCES = [
+  { key: 'monitor', name: 'monitor.py',          desc: 'limiar de conexões' },
+  { key: 'ai',      name: 'ai_detector.py',      desc: 'IsolationForest' },
+  { key: 'auth',    name: 'auth_log_monitor.py', desc: 'SSH / fail2ban' },
+  { key: 'ids',     name: 'ids_log_monitor.py',  desc: 'Suricata / Snort' },
+  { key: 'test',    name: '/test_alert',         desc: 'eventos simulados' },
+  { key: 'other',   name: 'sem fonte',           desc: 'reason não informado' },
+];
+const ACTIVITY_MINUTES = 15;
+const TIMELINE_WINDOW_MS = 30 * 60 * 1000;
+
+/* Fonte de deteccao a partir do campo reason que cada monitor envia */
+function sourceLabel(p) {
+  const r = displayText(p && p.reason);
+  if (p && isSimulatedEvent(p)) return { key: 'test', short: 'TESTE', long: '/test_alert (simulado)' };
+  if (/^ids_signature/i.test(r)) return { key: 'ids', short: 'IDS', long: `ids_log_monitor · assinatura ${r.split(':')[1] || '?'}` };
+  if (/tentativas falhas|jail=/i.test(r)) return { key: 'auth', short: 'AUTH.LOG', long: `auth_log_monitor · ${r}` };
+  if (r.includes('ai_anomaly')) {
+    return { key: 'ai', short: 'IA (IF)', long: r.includes('threshold') ? 'monitor.py · limiar + IsolationForest' : 'monitor.py · IsolationForest' };
+  }
+  if (r.includes('threshold')) return { key: 'monitor', short: 'LIMIAR', long: 'monitor.py · limiar de conexões' };
+  return { key: 'other', short: 'FONTE N/D', long: r };
+}
+
+function agoText(ms) {
+  const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+  if (s < 60) return `há ${s}s`;
+  if (s < 3600) return `há ${Math.floor(s / 60)}min`;
+  return `há ${Math.floor(s / 3600)}h`;
+}
+
+function hms(ms) {
+  const d = new Date(ms);
+  return [d.getHours(), d.getMinutes(), d.getSeconds()].map(n => String(n).padStart(2, '0')).join(':');
+}
+
+function renderIntelSources() {
+  const el = document.getElementById('intel-sources');
+  if (!el) return;
+  const row = (name, desc, value, cls) => `
+    <div class="src-row ${cls}">
+      <span class="src-name">${escHtml(name)}<small>${escHtml(desc)}</small></span>
+      <span class="src-val"><i class="src-dot" aria-hidden="true"></i>${escHtml(value)}</span>
+    </div>`;
+  const parts = [row('Flask-SocketIO', 'canal em tempo real',
+    state.socketUp ? 'CONECTADO' : 'DESCONECTADO', state.socketUp ? 'is-on' : 'is-off')];
+  for (const s of INTEL_SOURCES) {
+    const st = state.sources.get(s.key);
+    if (s.key === 'other' && !st) continue;
+    parts.push(st
+      ? row(s.name, s.desc, `${st.count} · ${agoText(st.last)}`, s.key === 'test' ? 'is-sim' : 'is-on')
+      : row(s.name, s.desc, 'SEM EVENTOS', 'is-idle'));
+  }
+  parts.push('<p class="src-note">Contagem de alertas recebidos nesta sessão. O painel não consulta os processos.</p>');
+  el.innerHTML = parts.join('');
+}
+
+function renderIntelActivity() {
+  const now = Date.now();
+  const buckets = new Array(ACTIVITY_MINUTES).fill(0);
+  let lastMinute = 0;
+  for (const { at } of state.alertLog) {
+    const age = now - at;
+    const idx = Math.floor(age / 60000);
+    if (idx < ACTIVITY_MINUTES) buckets[ACTIVITY_MINUTES - 1 - idx]++;
+    if (age < 60000) lastMinute++;
+  }
+  const total = buckets.reduce((a, b) => a + b, 0);
+  setText('intel-activity-value', total);
+  setText('hud-epm', lastMinute);
+  const level = total === 0 ? 'SEM ATIVIDADE' : total < 5 ? 'BAIXA' : total < 20 ? 'MODERADA' : 'ELEVADA';
+  const levelEl = document.getElementById('intel-activity-level');
+  if (levelEl) { levelEl.textContent = level; levelEl.dataset.level = level; }
+
+  const bars = document.getElementById('intel-activity-bars');
+  if (!bars) return;
+  if (bars.children.length !== ACTIVITY_MINUTES) {
+    bars.replaceChildren(...buckets.map(() => document.createElement('i')));
+  }
+  const max = Math.max(1, ...buckets);
+  buckets.forEach((n, i) => {
+    const bar = bars.children[i];
+    bar.style.height = `${n ? 12 + n / max * 88 : 4}%`;
+    bar.classList.toggle('is-now', i === ACTIVITY_MINUTES - 1);
+    bar.title = `${n} alerta(s) · ${ACTIVITY_MINUTES - 1 - i === 0 ? 'último minuto' : `há ${ACTIVITY_MINUTES - 1 - i} min`}`;
+  });
+}
+
+function renderIntelVectors() {
+  const el = document.getElementById('intel-vectors');
+  if (!el) return;
+  const entries = [...state.attackTypes.entries()].sort((a, b) => b[1] - a[1]);
+  const total = entries.reduce((a, [, n]) => a + n, 0);
+  if (!total) { el.innerHTML = '<div class="empty-state">Nenhum vetor observado ainda.</div>'; return; }
+  el.innerHTML = entries.slice(0, 5).map(([type, n]) => {
+    const pct = Math.round(n / total * 100);
+    return `<div class="vec-row">
+      <div class="vec-head"><span>${escHtml(type)}</span><span>${pct}% · ${n}</span></div>
+      <div class="vec-bar"><div style="width:${pct}%"></div></div>
+    </div>`;
+  }).join('');
+}
+
+function renderTargetHistory(ip) {
+  const el = document.getElementById('ac-history');
+  if (!el) return;
+  if (!ip) { el.innerHTML = '<div class="empty-state">Selecione um alvo.</div>'; return; }
+  const items = state.alertLog.filter(e => e.p.ip === ip).slice(-12).reverse();
+  if (!items.length) { el.innerHTML = '<div class="empty-state">Sem eventos deste IP nesta sessão.</div>'; return; }
+  el.innerHTML = items.map(({ at, p }) => `
+    <div class="hist-row${p === globe.selected ? ' is-current' : ''}">
+      <span class="hist-time">${hms(at)}</span>
+      <span class="hist-src">${escHtml(sourceLabel(p).short)}</span>
+      <span class="hist-text">${escHtml(attackTypeFromPayload(p))} · ${escHtml(placeName(p))}</span>
+    </div>`).join('');
+}
+
+function renderTimeline() {
+  const track = document.getElementById('intel-timeline');
+  if (!track) return;
+  const now = Date.now();
+  const recent = state.alertLog.filter(e => now - e.at < TIMELINE_WINDOW_MS).slice(-200);
+  track.replaceChildren();
+  let sim = 0;
+  for (const { at, p } of recent) {
+    const simulated = isSimulatedEvent(p);
+    if (simulated) sim++;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = `tl-mark${simulated ? ' is-sim' : ''}${p === globe.selected ? ' is-selected' : ''}`;
+    b.style.left = `${(1 - (now - at) / TIMELINE_WINDOW_MS) * 100}%`;
+    b.title = `${hms(at)} · ${attackTypeFromPayload(p)} · ${displayText(p.ip) || 'IP ?'}${simulated ? ' · SIMULADO' : ''}`;
+    b.setAttribute('aria-label', b.title);
+    b.addEventListener('click', () => selectAlert(p));
+    track.append(b);
+  }
+  setText('tl-count', recent.length);
+  setText('tl-sim', sim);
+  const banner = document.getElementById('sim-banner');
+  if (banner) banner.hidden = sim === 0;
+}
+
+function renderIntelPanels() {
+  renderIntelSources();
+  renderIntelActivity();
+  renderIntelVectors();
+  renderTimeline();
+}
+
+/* Leituras do palco central: posicao da camera, zoom, alvos e rotas */
+function updateStageHud() {
+  if (!globe.canvas || state.currentSection !== 'dash') return;
+  const lat = -globe.rotation[1];
+  const lon = ((-globe.rotation[0] + 540) % 360) - 180;
+  const f = v => `${v < 0 ? '-' : '+'}${Math.abs(v).toFixed(2).padStart(6, '0')}`;
+  setText('hud-center', `LAT ${f(lat)} // LON ${f(lon)}`);
+  setText('hud-zoom', `ZOOM ${globe.zoom.toFixed(2)}x · ORTHO`);
+  const targets = new Set(globe.markers.filter(m => m.ip).map(m => m.ip)).size;
+  setText('hud-scan', `VARREDURA 360° · ${targets} ${targets === 1 ? 'ALVO' : 'ALVOS'}`);
+  setText('hud-routes', `ROTAS ATIVAS ${String(globe.routeCount || 0).padStart(2, '0')}`);
+}
+
 /* ────────────────── SOCKET.IO ────────────────── */
 function bindSocket() {
   if (!window.io) return;
   const socket = io();
 
   socket.on('connect', () => {
-    setText('socket-status', 'REAL-TIME MONITORING');
+    setText('socket-status', '● LIVE');
     const statusEl = document.querySelector('#socket-status');
-    if (statusEl) statusEl.className = 'tstat-value cyan';
+    if (statusEl) statusEl.className = 'hud-v is-live';
+    state.socketUp = true;
+    renderIntelSources();
     setText('cfg-socket-status', 'CONECTADO');
   });
 
   socket.on('disconnect', () => {
-    setText('socket-status', 'OFFLINE');
+    setText('socket-status', '○ OFFLINE');
     const statusEl = document.querySelector('#socket-status');
-    if (statusEl) statusEl.className = 'tstat-value danger';
+    if (statusEl) statusEl.className = 'hud-v danger';
+    state.socketUp = false;
+    renderIntelSources();
     setText('cfg-socket-status', 'DESCONECTADO');
   });
 
@@ -1164,7 +1992,8 @@ function handleNewAlert(payload) {
 
   const ip = payload.ip;
   if (ip) {
-    state.ipsBlocked.add(ip);
+    /* Evento de teste nao passa pelo firewall: nao conta como IP bloqueado */
+    if (!isSimulatedEvent(payload)) state.ipsBlocked.add(ip);
     state.ipHits.set(ip, (state.ipHits.get(ip) || 0) + 1);
     if (payload.country) {
       state.ipCountry.set(ip, payload.country);
@@ -1175,6 +2004,18 @@ function handleNewAlert(payload) {
   const type = attackTypeFromPayload(payload);
   state.attackTypes.set(type, (state.attackTypes.get(type) || 0) + 1);
 
+  /* Central de inteligencia: registra o evento recebido (nunca inventado) */
+  const at = Date.now();
+  state.alertLog.push({ at, p: payload });
+  if (state.alertLog.length > ALERT_LOG_MAX) state.alertLog.shift();
+  if (ip) {
+    const seen = state.ipSeen.get(ip);
+    state.ipSeen.set(ip, { first: seen ? seen.first : at, last: at });
+  }
+  const src = sourceLabel(payload).key;
+  const srcState = state.sources.get(src) || { count: 0, last: 0 };
+  state.sources.set(src, { count: srcState.count + 1, last: at });
+
   /* Update counters */
   setText('metric-threats',    state.threatsTotal);
   setText('metric-unique-ips', state.ipsBlocked.size);
@@ -1184,19 +2025,20 @@ function handleNewAlert(payload) {
   prependAlertCard(payload);
 
   /* Globo: marcador + arco */
-  const lat = payload.lat, lon = payload.lon;
-  if (lat != null && lon != null) {
-    const defLat = state.defender.lat, defLon = state.defender.lon;
-    const sev = 'high';
-    addGlobeMarker(lat, lon, { ip, location: payload.location, severity: sev, alert: payload });
-    addGlobeArc(lat, lon, defLat, defLon, sev);
-    focusMapOn(lat, lon, 4000);
-    showMapLabel(`${placeName(payload)} · ${type}`, 5000);
+  if (eventCoords(payload)) {
+    showAttackOnGlobe(payload);
+    const alvo = targetLabel(payload);
+    if (!globe.hold) {
+      showMapLabel(`${placeName(payload)}${alvo ? ' → ' + alvo : ''} · ${type}`, ATTACK_LEAD_MS + ATTACK_TRAVEL_MS + ATTACK_HOLD_MS);
+    }
   }
 
   /* Atualiza donut e top IPs no dashboard */
   refreshSocDonut();
   renderTopIps();
+  renderIntelPanels();
+  /* O historico do alvo aberto cresce se o mesmo IP voltar a atacar */
+  if (globe.selected && globe.selected.ip === ip) renderTargetHistory(ip);
 
   /* Atualiza TODAS as páginas em tempo real */
   refreshAttacksPage();
@@ -1207,7 +2049,7 @@ function handleNewAlert(payload) {
 
   /* Terminal footer */
   const terminal = document.getElementById('terminal-line-1');
-  if (terminal) terminal.textContent = `[${new Date().toLocaleTimeString()}] ${type} · ${ip} bloqueado`;
+  if (terminal) terminal.textContent = `[${new Date().toLocaleTimeString()}] ${type} · ${ip} ${isSimulatedEvent(payload) ? 'SIMULADO (sem bloqueio)' : 'bloqueio solicitado'}`;
 }
 
 /* ────────────────── HACKER BINARY RAIN ────────────────── */
@@ -1461,9 +2303,9 @@ function termLogAlert(payload) {
   const type  = attackTypeFromPayload(payload);
   const ip    = payload.ip || '—';
   const loc   = payload.location || payload.country || '';
-  termPrint(`[BLOCK] ${type.padEnd(14)} ${ip}  ${loc}`, 't-block');
-  /* Atualiza a linha do footer também */
-  setText('terminal-line-1', `[BLOCK] ${type} · ${ip} bloqueado`);
+  const alvo  = targetLabel(payload);
+  const tag = isSimulatedEvent(payload) ? '[TESTE]' : '[BLOCK]';
+  termPrint(`${tag} ${type.padEnd(14)} ${ip}  ${loc}${alvo ? '  → ' + alvo : ''}`, isSimulatedEvent(payload) ? 't-warn' : 't-block');
 }
 
 /* ────────────────── INIT ────────────────── */
@@ -1478,6 +2320,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   initGlobe();
   ensureChart();
+  renderIntelPanels();
+  setInterval(renderIntelPanels, 5000);
+  setInterval(updateStageHud, 250);
   initHackerBinary();
   initEcg();
   initTerminal();
