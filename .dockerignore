@@ -11,3 +11,10 @@ venv/
 *.log
 .DS_Store
 coverage/
+.env.*
+!.env.example
+*.bak_*
+infra/
+.playwright-mcp/
+.venv_win/
+.claude/

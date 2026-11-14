@@ -12,7 +12,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
 # Bundle de CA exigido pelo TLS obrigatorio do Amazon DocumentDB
-ADD https://truststore.pki.rds.amazonaws.com/global-bundle.pem /app/global-bundle.pem
+ADD https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /app/global-bundle.pem
 
 COPY . .
 

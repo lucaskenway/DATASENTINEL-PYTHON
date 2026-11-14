@@ -4,3 +4,11 @@
 aws_region   = "us-east-1"
 project_name = "datasentinel"
 image_tag    = "latest"
+
+# AWS Academy Learner Lab: nao permite criar IAM roles. Use a LabRole:
+# existing_role_arn = "arn:aws:iam::<ACCOUNT_ID>:role/LabRole"
+
+# Learner Lab tambem bloqueia DocumentDB. Rode o Mongo como container na task:
+# database_mode  = "sidecar"
+# fargate_cpu    = "512"
+# fargate_memory = "1024"

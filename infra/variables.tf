@@ -39,3 +39,26 @@ variable "fargate_memory" {
   type        = string
   default     = "512"
 }
+
+variable "existing_role_arn" {
+  description = "ARN de uma role IAM ja existente para o ECS (ex.: LabRole do AWS Academy). Vazio = o Terraform cria as roles."
+  type        = string
+  default     = ""
+}
+
+variable "database_mode" {
+  description = "\"documentdb\" (cluster gerenciado) ou \"sidecar\" (container mongo na task Fargate, dados nao persistem)."
+  type        = string
+  default     = "documentdb"
+
+  validation {
+    condition     = contains(["documentdb", "sidecar"], var.database_mode)
+    error_message = "database_mode deve ser \"documentdb\" ou \"sidecar\"."
+  }
+}
+
+variable "mongo_image" {
+  description = "Imagem do container mongo usada no modo sidecar."
+  type        = string
+  default     = "mongo:7.0"
+}

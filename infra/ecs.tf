@@ -17,14 +17,17 @@ resource "aws_ecs_task_definition" "this" {
   network_mode             = "awsvpc"
   cpu                      = var.fargate_cpu
   memory                   = var.fargate_memory
-  execution_role_arn       = aws_iam_role.ecs_execution.arn
-  task_role_arn            = aws_iam_role.ecs_task.arn
+  execution_role_arn       = local.execution_role_arn
+  task_role_arn            = local.task_role_arn
 
-  container_definitions = jsonencode([
+  container_definitions = jsonencode(concat([
     {
       name      = var.project_name
       image     = local.container_image
       essential = true
+      dependsOn = local.use_documentdb ? null : [
+        { containerName = "mongo", condition = "HEALTHY" },
+      ]
       portMappings = [
         {
           containerPort = 5000
@@ -52,7 +55,36 @@ resource "aws_ecs_task_definition" "this" {
         }
       }
     }
-  ])
+    ], local.use_documentdb ? [] : [
+    {
+      name      = "mongo"
+      image     = var.mongo_image
+      essential = true
+      environment = [
+        { name = "MONGO_INITDB_ROOT_USERNAME", value = "datasentinel" },
+      ]
+      secrets = [
+        { name = "MONGO_INITDB_ROOT_PASSWORD", valueFrom = "${aws_secretsmanager_secret.app.arn}:MONGO_ROOT_PASSWORD::" },
+      ]
+      # So fica HEALTHY depois que o init do mongo criou o usuario root,
+      # evitando que a app conecte durante o init e falhe na autenticacao.
+      healthCheck = {
+        command     = ["CMD-SHELL", "mongosh --quiet -u \"$MONGO_INITDB_ROOT_USERNAME\" -p \"$MONGO_INITDB_ROOT_PASSWORD\" --authenticationDatabase admin --eval 'db.adminCommand({ping: 1})' || exit 1"]
+        interval    = 10
+        timeout     = 5
+        retries     = 6
+        startPeriod = 20
+      }
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.this.name
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "mongo"
+        }
+      }
+    }
+  ]))
 }
 
 resource "aws_ecs_service" "this" {
@@ -79,5 +111,5 @@ resource "aws_ecs_service" "this" {
     container_port   = 5000
   }
 
-  depends_on = [aws_lb_listener.this, aws_iam_role_policy_attachment.ecs_execution_managed]
+  depends_on = [aws_lb_listener.this, aws_iam_role_policy_attachment.ecs_execution_managed, aws_iam_role_policy.ecs_execution_secrets]
 }

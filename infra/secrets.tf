@@ -22,7 +22,10 @@ resource "random_password" "ingest_token" {
 }
 
 locals {
-  mongodb_uri = "mongodb://datasentinel:${random_password.docdb.result}@${aws_docdb_cluster.this.endpoint}:27017/?tls=true&tlsCAFile=/app/global-bundle.pem&retryWrites=false&authSource=admin"
+  mongodb_uri = (local.use_documentdb
+    ? "mongodb://datasentinel:${random_password.docdb.result}@${aws_docdb_cluster.this[0].endpoint}:27017/?tls=true&tlsCAFile=/app/global-bundle.pem&retryWrites=false&authSource=admin"
+    : "mongodb://datasentinel:${random_password.docdb.result}@localhost:27017/?authSource=admin"
+  )
 }
 
 resource "aws_secretsmanager_secret" "app" {
@@ -42,5 +45,6 @@ resource "aws_secretsmanager_secret_version" "app" {
     DATASENTINEL_SECRET_KEY     = random_password.flask_secret_key.result
     DATASENTINEL_INGEST_TOKEN   = random_password.ingest_token.result
     DATASENTINEL_MONGODB_URI    = local.mongodb_uri
+    MONGO_ROOT_PASSWORD         = random_password.docdb.result
   })
 }
