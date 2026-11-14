@@ -30,6 +30,11 @@ const state = {
   alertLog:      [],          /* [{ at: ms de recebimento, p: payload }], mais recente no fim */
   ipSeen:        new Map(),   /* ip -> { first: ms, last: ms } */
   sources:       new Map(),   /* fonte de deteccao -> { count, last } */
+  ipLastAlert:   new Map(),   /* ip -> ultimo payload recebido (pagina Firewall) */
+  system:        null,        /* ultima resposta de /api/system */
+  atkFilter: 'all',
+  logLevel: 'ALL', logQuery: '', logSig: '', logSelected: null,
+  logSourcesOff: new Set(),
 };
 const ALERT_LOG_MAX = 500;
 
@@ -1133,23 +1138,18 @@ function showSection(name) {
   if (menuItem) menuItem.classList.add('active');
 
   /* Post-switch actions */
+  if (name === 'dash' || name === 'ataques') placeGlobe(name);
   if (name === 'dash' && globe.canvas) {
     setTimeout(resizeGlobe, 50);
   }
-  if (name === 'ataques') refreshAttacksPage();
-  if (name === 'firewall') refreshFirewallPage();
   if (name === 'logs') refreshLogsPage();
   if (name === 'net') {
     setTimeout(() => {
       initNetPageCharts();
       if (netPageChart) netPageChart.update();
-      if (connsPageChart) connsPageChart.update();
     }, 50);
   }
-  if (name === 'sobre') {
-    const el = document.getElementById('about-uptime');
-    if (el) el.textContent = uptimeString();
-  }
+  renderCurrentPage();
 }
 
 function bindNavigation() {
@@ -1187,7 +1187,15 @@ function bindNavigation() {
 }
 
 /* ────────────────── CLOCK ────────────────── */
+function clockZone() {
+  const off = -new Date().getTimezoneOffset();
+  const sign = off < 0 ? '-' : '+';
+  const abs = Math.abs(off);
+  return `UTC${sign}${String(Math.floor(abs / 60)).padStart(2, '0')}${abs % 60 ? ':' + String(abs % 60).padStart(2, '0') : ''}`;
+}
+
 function atualizarRelogio() {
+  setText('clock-zone', clockZone());
   const now = new Date();
   const t = el => document.getElementById(el);
   const pad = n => String(n).padStart(2, '0');
@@ -1376,6 +1384,7 @@ function getDonutData() {
 function refreshSocDonut() {
   const { labels, data, colors } = getDonutData();
   if (labels.length === 0) return;
+  refreshAtkPageDonut(labels, data, colors);
 
   const canvas = document.getElementById('socDonut');
   if (!canvas) return;
@@ -1398,7 +1407,6 @@ function refreshSocDonut() {
     socDonutChart.update('none');
   }
   renderDonutLegend(labels, data, colors, 'donut-legend');
-  refreshAtkPageDonut(labels, data, colors);
 }
 
 function renderDonutLegend(labels, data, colors, containerId) {
@@ -1619,7 +1627,7 @@ async function pollMetrics() {
     setText('fw-blocked',   state.ipsBlocked.size);
     setText('fw-ip-count',  state.ipsBlocked.size);
     setText('atk-total',    state.threatsTotal);
-    setText('atk-ips',      state.ipsBlocked.size);
+    setText('atk-ips',      state.ipHits.size);
     setText('atk-countries',state.countries.size);
 
   } catch (e) { /* silent */ }
@@ -1636,13 +1644,14 @@ function setText(id, val) { const el = document.getElementById(id); if (el) el.t
 /* ────────────────── LOGS POLLING ────────────────── */
 async function pollLogs() {
   try {
-    const res = await fetch('/api/logs?n=200');
+    /* Na pagina Logs carrega o maximo que a API permite */
+    const res = await fetch(`/api/logs?n=${state.currentSection === 'logs' ? 500 : 200}`);
     if (res.status === 401) { window.location.href = '/login'; return; }
     const d   = await res.json();
     const lines = d.lines || [];
     state.allLogLines = lines;
     renderRecentLogs(lines.slice(-20));
-    renderFullLogs(lines);
+    renderFullLogs();
     streamLogsToTerminal(lines);   /* stream para o terminal aberto */
   } catch (e) { /* silent */ }
 }
@@ -1675,49 +1684,6 @@ function parseLogLine(line) {
   return { time, text, tag: 'INFO', tagClass: 'log-tag-info' };
 }
 
-function renderFullLogs(lines) {
-  const el = document.getElementById('logs-full-container');
-  if (!el) return;
-  const countEl = document.getElementById('log-count');
-
-  if (!lines.length) {
-    el.innerHTML = '<div class="empty-state">Nenhum log encontrado.</div>';
-    if (countEl) countEl.textContent = '0 linhas';
-    return;
-  }
-
-  el.innerHTML = '';
-  lines.slice().reverse().forEach(line => {
-    const div = document.createElement('div');
-    const { time, tag, tagClass } = parseLogLine(line);
-    div.className = `full-log-line mono fl-${tagClass.replace('log-tag-','')}`;
-    div.innerHTML = `
-      <span class="fl-time">${time}</span>
-      <span class="log-tag ${tagClass}">${tag}</span>
-      <span class="fl-text">${escHtml(line)}</span>
-    `;
-    el.appendChild(div);
-  });
-  if (countEl) countEl.textContent = `${lines.length} linhas`;
-}
-
-function filterFullLogs(query) {
-  if (!query) { renderFullLogs(state.allLogLines); return; }
-  const q = query.toLowerCase();
-  renderFullLogs(state.allLogLines.filter(l => l.toLowerCase().includes(q)));
-}
-
-function fetchAndRenderFullLogs() {
-  fetch('/api/logs?n=500').then(r => r.json()).then(d => {
-    state.allLogLines = d.lines || [];
-    renderFullLogs(state.allLogLines);
-  }).catch(() => {});
-}
-
-function refreshLogsPage() {
-  renderFullLogs(state.allLogLines);
-}
-
 function escHtml(s) {
   return String(s == null ? '' : s)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
@@ -1726,58 +1692,6 @@ function escHtml(s) {
 
 function csrfToken() {
   return document.querySelector('meta[name="csrf-token"]')?.content || '';
-}
-
-/* ────────────────── ATAQUES PAGE ────────────────── */
-function refreshAttacksPage() {
-  /* Stats */
-  setText('atk-total', state.threatsTotal);
-  setText('atk-ips', state.ipsBlocked.size);
-  setText('atk-countries', state.countries.size);
-  if (state.lastAlertTs) {
-    const d = new Date(state.lastAlertTs);
-    const t = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
-    setText('atk-last', t);
-  }
-
-  /* Type list */
-  const el = document.getElementById('attack-type-list');
-  if (el) {
-    const entries = [...state.attackTypes.entries()].sort((a,b) => b[1] - a[1]);
-    const max = entries[0]?.[1] || 1;
-    el.innerHTML = entries.map(([type, count]) => `
-      <div class="type-row">
-        <span class="badge ${badgeClass(type)}">${type}</span>
-        <div class="type-bar-wrap"><div class="type-bar-fill" style="width:${Math.round(count/max*100)}%;background:${typeColor(type)}"></div></div>
-        <span class="type-count">${count}</span>
-      </div>
-    `).join('') || '<div class="empty-state">Aguardando…</div>';
-  }
-}
-
-/* ────────────────── FIREWALL PAGE ────────────────── */
-function refreshFirewallPage() {
-  setText('fw-blocked', state.ipsBlocked.size);
-  setText('fw-threats', state.threatsTotal);
-  setText('fw-ip-count', state.ipsBlocked.size);
-
-  const el = document.getElementById('fw-ips-list');
-  if (!el) return;
-  const sorted = [...state.ipHits.entries()].filter(([ip]) => state.ipsBlocked.has(ip)).sort((a,b) => b[1] - a[1]);
-  if (sorted.length === 0) { el.innerHTML = '<div class="empty-state">Nenhum IP bloqueado ainda…</div>'; return; }
-  el.innerHTML = sorted.slice(0, 40).map(([ip, count]) => {
-    const country = state.ipCountry.get(ip) || '—';
-    const flag = flagEmoji(country);
-    /* Horario do ultimo alerta deste IP (antes mostrava a hora atual em todas as linhas) */
-    const seen = state.ipSeen.get(ip);
-    const time = seen ? new Date(seen.last).toLocaleTimeString('pt-BR') : '—';
-    return `<div class="fw-ip-row">
-      <span style="font-size:14px">${flag}</span>
-      <span class="fw-ip-addr">${escHtml(ip)}</span>
-      <span class="fw-ip-count">${count}x</span>
-      <span class="fw-ip-time">${time}</span>
-    </div>`;
-  }).join('');
 }
 
 /* ────────────────── CENTRAL DE INTELIGENCIA ────────────────── */
@@ -1923,6 +1837,8 @@ function renderTimeline() {
   }
   setText('tl-count', recent.length);
   setText('tl-sim', sim);
+  setText('tl-blocks', state.alertLog.filter(e => now - e.at < 86400000 && !isSimulatedEvent(e.p)).length);
+  updateSimBanner();
   const banner = document.getElementById('sim-banner');
   if (banner) banner.hidden = sim === 0;
 }
@@ -1945,6 +1861,917 @@ function updateStageHud() {
   const targets = new Set(globe.markers.filter(m => m.ip).map(m => m.ip)).size;
   setText('hud-scan', `VARREDURA 360° · ${targets} ${targets === 1 ? 'ALVO' : 'ALVOS'}`);
   setText('hud-routes', `ROTAS ATIVAS ${String(globe.routeCount || 0).padStart(2, '0')}`);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   PÁGINAS · MÓDULOS 02–06 + SOBRE
+   Fontes de dados (todas reais):
+   - state.alertLog: alertas recebidos via Socket.IO nesta sessão
+   - state.allLogLines: ataques.log via /api/logs
+   - state.system: /api/system (rede, MongoDB, modelo de IA, config)
+   O que não existe no sistema aparece como "não implementado" ou vazio.
+   ══════════════════════════════════════════════════════════════ */
+
+const SYSTEM_POLL_MS = 5000;
+const KNOWN_PORTS = {
+  20: 'FTP-DATA', 21: 'FTP', 22: 'SSH', 23: 'TELNET', 25: 'SMTP', 53: 'DNS', 80: 'HTTP',
+  110: 'POP3', 123: 'NTP', 143: 'IMAP', 443: 'HTTPS', 445: 'SMB', 993: 'IMAPS', 995: 'POP3S',
+  1433: 'MSSQL', 3306: 'MYSQL', 3389: 'RDP', 5000: 'FLASK', 5432: 'POSTGRES', 5900: 'VNC',
+  6379: 'REDIS', 8080: 'HTTP-ALT', 8443: 'HTTPS-ALT', 27017: 'MONGODB',
+};
+const MODULES = [
+  { key: 'monitor', name: 'monitor.py',          desc: 'coleta de conexões (psutil)' },
+  { key: 'detector', name: 'detector.py',        desc: 'detecção baseada em regras' },
+  { key: 'ai',      name: 'ai_detector.py',      desc: 'anomalias com IsolationForest' },
+  { key: 'firewall', name: 'firewall.py',        desc: 'bloqueio via iptables / netsh' },
+  { key: 'alerting', name: 'alerting.py',        desc: 'dedup, geolocalização, envio' },
+  { key: 'auth',    name: 'auth_log_monitor.py', desc: 'leitura do auth.log / fail2ban' },
+  { key: 'ids',     name: 'ids_log_monitor.py',  desc: 'leitura de alertas do IDS' },
+  { key: 'mongo',   name: 'MongoDB',             desc: 'persistência dos alertas' },
+];
+
+function portLabel(port) { return KNOWN_PORTS[port] || null; }
+function fmtAgo(seconds) {
+  const s = Math.max(0, Math.round(seconds));
+  const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+  if (d) return `${d}d ${h}h ${m}m`;
+  if (h) return `${h}h ${m}m`;
+  return `${m}m ${s % 60}s`;
+}
+function isLoopback(ip) { return !ip || ip.startsWith('127.') || ip === '::1' || ip === '0.0.0.0' || ip === '::'; }
+/* Código ISO do país; sem código conhecido, o nome inteiro (nunca 2 letras inventadas) */
+function countryCode(p) {
+  return displayText(p.countryCode).toUpperCase() || (countryToISO(p.country) || '').toUpperCase() || displayText(p.country) || '—';
+}
+function sysColors() {
+  return globe.colors || { neon: cssVar('--neon'), neon2: cssVar('--neon2'), cyan: cssVar('--cyan'), cyan2: cssVar('--cyan2'), warn2: cssVar('--warn2') };
+}
+
+/* Histograma de colunas: conta timestamps (ms) em `count` faixas de `span` ms até agora */
+function renderBuckets(id, times, count, span, titleFn) {
+  const el = document.getElementById(id);
+  const now = Date.now();
+  const buckets = new Array(count).fill(0);
+  for (const t of times) {
+    const idx = Math.floor((now - t) / span);
+    if (idx >= 0 && idx < count) buckets[count - 1 - idx]++;
+  }
+  if (!el) return buckets;
+  if (el.children.length !== count) el.replaceChildren(...buckets.map(() => document.createElement('i')));
+  const max = Math.max(1, ...buckets);
+  buckets.forEach((n, i) => {
+    const bar = el.children[i];
+    bar.style.height = `${n ? 12 + n / max * 88 : 3}%`;
+    bar.classList.toggle('is-now', i === count - 1);
+    bar.title = titleFn(n, count - 1 - i);
+  });
+  return buckets;
+}
+
+/* Barras horizontais: [rótulo, valor, destaque] */
+function renderBarList(id, rows, emptyText, pct = false) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (!rows.length) { el.innerHTML = `<div class="empty-state">${escHtml(emptyText)}</div>`; return; }
+  const total = rows.reduce((a, r) => a + r[1], 0) || 1;
+  const max = Math.max(...rows.map(r => r[1]));
+  el.innerHTML = rows.map(([label, n, mark]) => `
+    <div class="bar-row${mark ? ' is-sim' : ''}">
+      <div class="bar-head"><span>${escHtml(label)}</span><b>${pct ? `${Math.round(n / total * 100)}%` : n}</b></div>
+      <div class="vec-bar"><div style="width:${Math.round(n / max * 100)}%"></div></div>
+    </div>`).join('');
+}
+
+/* ────────────────── ataques.log (parse com cache) ────────────────── */
+const LOG_LEVELS = ['BLOCK', 'ALERT', 'WARN', 'INFO'];
+const LOG_SOURCES = [
+  { key: 'server', name: 'server.py',   desc: 'alertas recebidos (BLOCK)' },
+  { key: 'logger', name: 'logger.py',   desc: 'monitores: monitor / auth / ids' },
+  { key: 'test',   name: '/test_alert', desc: 'eventos de teste' },
+  { key: 'other',  name: 'outros',      desc: 'linhas sem formato conhecido' },
+];
+let logCache = { src: null, rows: [] };
+
+function logLineTime(line) {
+  const m = line.match(/\[(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})\]/);
+  if (!m) return null;
+  const t = new Date(`${m[1]}T${m[2]}`).getTime();
+  return Number.isFinite(t) ? t : null;
+}
+function isTestLogLine(line) { return /\|\s*TESTE\b|\bSIMULATED\b/i.test(line); }
+
+function parsedLogs() {
+  if (logCache.src === state.allLogLines) return logCache.rows;
+  const rows = state.allLogLines.map((line, i) => {
+    const { time, tag, tagClass } = parseLogLine(line);
+    const test = isTestLogLine(line);
+    const src = test ? 'test'
+      : /^\[[^\]]+\]\s*BLOCK \|/.test(line) ? 'server'
+      : /ATAQUE detectado|Forca Bruta|IDS:/i.test(line) ? 'logger' : 'other';
+    const msg = line.replace(/^\[[^\]]+\]\s*/, '').replace(/^BLOCK \|\s*/, '');
+    const ip = (line.match(/\bIP\s+([0-9a-fA-F:.]{3,})/) || line.match(/\bde\s+([0-9]{1,3}(?:\.[0-9]{1,3}){3})/) || [])[1] || '';
+    const loc = (line.match(/Localiza[cç][aã]o:\s*([^|]+)/i) || [])[1]?.trim() || '';
+    const kind = (line.match(/ATAQUE detectado \(([^)]+)\)/) || [])[1] || (test ? 'TESTE' : '');
+    return { n: i + 1, line, t: logLineTime(line), time, tag, tagClass, src, test, msg, ip, loc, kind };
+  });
+  logCache = { src: state.allLogLines, rows };
+  return rows;
+}
+
+/* ────────────────── /api/system ────────────────── */
+async function pollSystem() {
+  try {
+    const res = await fetch('/api/system');
+    if (res.status === 401) { window.location.href = '/login'; return; }
+    const d = await res.json();
+    /* Taxa por interface: diferença de bytes entre duas leituras */
+    const prev = state.system;
+    const dt = prev ? d.ts - prev.ts : 0;
+    for (const nic of d.network.interfaces) {
+      const old = prev && prev.network.interfaces.find(x => x.name === nic.name);
+      if (old && dt > 0 && nic.bytes_recv != null && old.bytes_recv != null) {
+        nic.in_mbps = Math.max(0, (nic.bytes_recv - old.bytes_recv) * 8 / dt / 1e6);
+        nic.out_mbps = Math.max(0, (nic.bytes_sent - old.bytes_sent) * 8 / dt / 1e6);
+      }
+    }
+    state.system = d;
+    const m = d.mongodb;
+    const mongoEl = document.getElementById('hud-mongo');
+    if (mongoEl) {
+      mongoEl.textContent = !m.configured ? 'DESATIVADO' : m.online ? 'ONLINE' : 'OFFLINE';
+      mongoEl.className = `hud-v ${!m.configured ? 'muted' : m.online ? '' : 'danger'}`;
+    }
+    renderCurrentPage();
+  } catch (e) { /* silencioso: tenta de novo no próximo ciclo */ }
+}
+
+function renderCurrentPage() {
+  const s = state.currentSection;
+  if (s === 'ataques') refreshAttacksPage();
+  if (s === 'firewall') refreshFirewallPage();
+  if (s === 'net') renderNetPage();
+  if (s === 'config') renderConfigPage();
+  if (s === 'sobre') renderAboutPage();
+  updateSimBanner();
+}
+
+function updateSimBanner() {
+  const any = state.alertLog.some(e => isSimulatedEvent(e.p));
+  const el = document.getElementById('page-sim-banner');
+  if (el) el.hidden = !any || state.currentSection === 'dash';
+}
+
+/* ════════════ MÓDULO 02 · ATAQUES ════════════ */
+function refreshAttacksPage() {
+  const now = Date.now();
+  setText('atk-24h', state.alertLog.filter(e => now - e.at < 86400000).length);
+  setText('atk-blocked', state.ipsBlocked.size);
+  setText('atk-ips', state.ipHits.size);
+  const origins = new Set(globe.markers.filter(m => m.ip).map(m => m.ip)).size;
+  setText('atk-globe-caption', `VARREDURA GLOBAL · ${origins} ${origins === 1 ? 'ORIGEM ATIVA' : 'ORIGENS ATIVAS'}`);
+
+  /* Tabela */
+  const body = document.getElementById('atk-table');
+  if (body) {
+    const rows = state.alertLog.slice().reverse()
+      .filter(e => state.atkFilter === 'all' || sourceLabel(e.p).key === state.atkFilter)
+      .slice(0, 120);
+    body.replaceChildren();
+    if (!rows.length) {
+      body.innerHTML = `<tr><td colspan="7" class="empty-state">${state.alertLog.length ? 'Nenhum ataque desta fonte.' : 'Aguardando ataques…'}</td></tr>`;
+    }
+    for (const { at, p } of rows) {
+      const tr = document.createElement('tr');
+      const sim = isSimulatedEvent(p);
+      tr.className = `${p === globe.selected ? 'is-selected' : ''}${sim ? ' is-sim' : ''}`;
+      tr.tabIndex = 0;
+      tr.innerHTML = `
+        <td>${hms(at)}</td>
+        <td class="c-ip">${escHtml(displayText(p.ip) || '—')}</td>
+        <td>${escHtml(countryCode(p))}</td>
+        <td>${escHtml(attackTypeFromPayload(p))}</td>
+        <td>${escHtml(displayText(p.port ?? p.dest_port) || '—')}</td>
+        <td><span class="sev ${p.severity ? '' : 'sev-na'}">${escHtml(displayText(p.severity) || 'N/D')}</span></td>
+        <td>${escHtml(sourceLabel(p).short)}</td>`;
+      tr.title = sim ? 'Evento de teste (simulado)' : 'Clique para rastrear no globo';
+      const pick = () => trackOnAttacksPage(p);
+      tr.addEventListener('click', pick);
+      tr.addEventListener('keydown', e => { if (e.key === 'Enter') pick(); });
+      body.append(tr);
+    }
+  }
+
+  /* Mapa de calor e países: histórico real do ataques.log (sem linhas de teste) */
+  const real = parsedLogs().filter(r => r.src === 'server' && r.t != null);
+  renderHeatmap(real.map(r => r.t));
+  const byCountry = new Map();
+  for (const r of real) {
+    const c = r.loc.split(' - ')[0].trim();
+    if (c) byCountry.set(c, (byCountry.get(c) || 0) + 1);
+  }
+  renderBarList('atk-countries-list', [...byCountry.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5)
+    .map(([c, n]) => [c, n, false]), 'Sem bloqueios reais no ataques.log.', true);
+}
+
+/* Na própria página Ataques: mostra a rota no globo sem trocar de seção */
+function trackOnAttacksPage(p) {
+  globe.selected = p;
+  globe.hold = false;
+  globe.highlight = null;
+  if (eventCoords(p)) showAttackOnGlobe(p);
+  else showMapLabel('Evento sem coordenadas', 3000);
+  refreshAttacksPage();
+}
+
+function renderHeatmap(times) {
+  const el = document.getElementById('atk-heatmap');
+  if (!el) return;
+  const grid = Array.from({ length: 7 }, () => new Array(24).fill(0));
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  for (const t of times) {
+    const d = new Date(t);
+    const day = Math.floor((today - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000);
+    if (day >= 0 && day < 7) grid[6 - day][d.getHours()]++;
+  }
+  const max = Math.max(1, ...grid.flat());
+  const names = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
+  const rows = grid.map((row, i) => {
+    const date = new Date(today.getTime() - (6 - i) * 86400000);
+    const cells = row.map((n, h) => {
+      const lvl = n ? Math.min(4, 1 + Math.floor(n / max * 3.999)) : 0;
+      return `<i class="hm-${lvl}" title="${names[date.getDay()]} ${String(h).padStart(2, '0')}h · ${n} bloqueio(s)"></i>`;
+    }).join('');
+    return `<span class="hm-day">${names[date.getDay()]}</span>${cells}`;
+  }).join('');
+  const axis = [0, 3, 6, 9, 12, 15, 18, 21].map(h => `<span style="grid-column:${h + 2}">${String(h).padStart(2, '0')}</span>`).join('');
+  el.innerHTML = `<div class="hm-grid">${rows}</div><div class="hm-axis">${axis}</div>
+    ${times.length ? '' : '<p class="hm-empty">Sem bloqueios reais nos últimos 7 dias.</p>'}`;
+}
+
+/* ════════════ MÓDULO 03 · FIREWALL ════════════ */
+function realBlocks() {
+  /* Um item por IP realmente bloqueado, na ordem do primeiro bloqueio */
+  return [...state.ipsBlocked].map(ip => ({
+    ip, hits: state.ipHits.get(ip) || 0, seen: state.ipSeen.get(ip), last: state.ipLastAlert.get(ip),
+  })).sort((a, b) => (a.seen?.first || 0) - (b.seen?.first || 0));
+}
+
+function fwCommand(ip) {
+  const plat = state.system?.platform || '';
+  if (plat.startsWith('win')) return `netsh advfirewall firewall add rule name="Block ${ip}" dir=in action=block remoteip=${ip}`;
+  if (plat.startsWith('linux')) return `iptables -I INPUT -s ${ip} -j DROP`;
+  return null;
+}
+
+function refreshFirewallPage() {
+  const blocks = realBlocks();
+  const plat = state.system?.platform || '';
+  const chain = plat.startsWith('win') ? 'IN' : 'INPUT';
+  const action = plat.startsWith('win') ? 'BLOCK' : 'DROP';
+  setText('fw-blocked', blocks.length);
+  setText('fw-rules-count', blocks.length);
+  setText('fw-allowed', state.system ? state.system.network.connections_total : '—');
+
+  const rules = document.getElementById('fw-rules');
+  if (rules) {
+    rules.innerHTML = blocks.length ? blocks.map((b, i) => `
+      <tr${i === blocks.length - 1 ? ' class="is-selected"' : ''}>
+        <td>${String(i + 1).padStart(2, '0')}</td><td>${chain}</td>
+        <td><span class="act act-drop">${action}</span></td>
+        <td class="c-ip">${escHtml(b.ip)}</td><td>*</td><td>${b.hits}</td>
+      </tr>`).join('')
+      : '<tr><td colspan="6" class="empty-state">Nenhuma regra criada nesta sessão.</td></tr>';
+  }
+  const ips = document.getElementById('fw-ips-table');
+  if (ips) {
+    ips.innerHTML = blocks.length ? blocks.slice().reverse().map(b => `
+      <tr><td class="c-ip">${escHtml(b.ip)}</td><td>${escHtml(b.last ? countryCode(b.last) : '—')}</td>
+      <td>${escHtml(b.last ? attackTypeFromPayload(b.last) : '—')}</td><td class="c-warn">PERMANENTE</td></tr>`).join('')
+      : '<tr><td colspan="4" class="empty-state">Nenhum IP bloqueado nesta sessão.</td></tr>';
+  }
+
+  const lastReal = [...state.alertLog].reverse().find(e => !isSimulatedEvent(e.p));
+  const la = document.getElementById('fw-last-action');
+  const sh = document.getElementById('fw-shell');
+  if (lastReal && la && sh) {
+    const p = lastReal.p, ip = displayText(p.ip);
+    const idx = blocks.findIndex(b => b.ip === ip) + 1;
+    const notify = `ataques.log${state.system?.config?.email ? ' · e-mail' : ''}`;
+    la.innerHTML = `
+      <div class="la-big">${action} ${escHtml(ip)}</div>
+      <div class="stat-row"><span>REGRA</span><strong>#${String(idx).padStart(2, '0')} ${chain} · todas as portas</strong></div>
+      <div class="stat-row"><span>GATILHO</span><strong>${escHtml(attackTypeFromPayload(p))}</strong></div>
+      <div class="stat-row"><span>ORIGEM DO ALERTA</span><strong>${escHtml(sourceLabel(p).long || '—')}</strong></div>
+      <div class="stat-row"><span>NOTIFICADO</span><strong>${escHtml(notify)}</strong></div>`;
+    const cmd = fwCommand(ip);
+    sh.innerHTML = cmd
+      ? `<div><span class="sh-p">$</span> ${escHtml(cmd)}</div>
+         <div class="sh-c">→ executado pelo monitor às ${hms(lastReal.at)}</div>
+         <div class="sh-c">→ o resultado do comando não é enviado ao painel</div>`
+      : '<div class="sh-c">Servidor sem backend de firewall suportado (só Windows e Linux).</div>';
+  }
+
+  const times = parsedLogs().filter(r => r.src === 'server' && r.t != null).map(r => r.t);
+  renderBuckets('fw-hours', times, 24, 3600000, (n, ago) => `${n} bloqueio(s) · ${ago === 0 ? 'última hora' : `há ${ago}–${ago + 1} h`}`);
+}
+
+/* ════════════ MÓDULO 04 · LOGS ════════════ */
+let logDonutChart = null;
+
+function renderFullLogs() {
+  const el = document.getElementById('logs-full-container');
+  if (!el) return;
+  const rows = parsedLogs();
+
+  /* Fontes: liga/desliga por fonte (filtra o stream) */
+  const srcEl = document.getElementById('log-sources');
+  if (srcEl) {
+    srcEl.innerHTML = LOG_SOURCES.map(s => {
+      const n = rows.filter(r => r.src === s.key).length;
+      const on = !state.logSourcesOff.has(s.key);
+      return `<button type="button" class="opt opt-btn" data-src="${s.key}" aria-pressed="${on}">
+        <span>${escHtml(s.name)}<small>${n} linhas · ${escHtml(s.desc)}</small></span>
+        <i class="toggle${on ? ' is-on' : ''}"></i></button>`;
+    }).join('');
+  }
+
+  /* Níveis + donut */
+  const counts = Object.fromEntries(LOG_LEVELS.map(l => [l, 0]));
+  for (const r of rows) counts[r.tag]++;
+  setText('log-total', rows.length);
+  const levelColors = { BLOCK: cssVar('--danger'), ALERT: cssVar('--cyan'), WARN: cssVar('--warn2'), INFO: cssVar('--neon') };
+  const lv = document.getElementById('log-levels');
+  if (lv) {
+    lv.innerHTML = ['ALL', ...LOG_LEVELS].map(l => `
+      <button type="button" class="level-row lvl-${l.toLowerCase()}${state.logLevel === l ? ' is-on' : ''}" data-level="${l}">
+        <span><i class="lvl-dot" aria-hidden="true"></i>${l === 'ALL' ? 'TODOS' : l}</span><b>${l === 'ALL' ? rows.length : counts[l]}</b>
+      </button>`).join('');
+  }
+  const dc = document.getElementById('log-donut');
+  if (dc && window.Chart && dc.offsetParent) {
+    const data = LOG_LEVELS.map(l => counts[l]);
+    const colors = LOG_LEVELS.map(l => levelColors[l]);
+    if (!logDonutChart) {
+      logDonutChart = new Chart(dc, {
+        type: 'doughnut',
+        data: { labels: LOG_LEVELS, datasets: [{ data, backgroundColor: colors, borderWidth: 0 }] },
+        options: { cutout: '78%', animation: { duration: 300 }, plugins: { legend: { display: false } } },
+      });
+    } else {
+      logDonutChart.data.datasets[0].data = data;
+      logDonutChart.update('none');
+    }
+  }
+
+  /* Ritmo por hora */
+  const buckets = renderBuckets('log-hours', rows.filter(r => r.t != null).map(r => r.t), 24, 3600000,
+    (n, ago) => `${n} linha(s) · ${ago === 0 ? 'última hora' : `há ${ago}–${ago + 1} h`}`);
+  const total24 = buckets.reduce((a, b) => a + b, 0);
+  setText('log-avg', `${(total24 / 24).toFixed(1)} / h`);
+  const peak = Math.max(...buckets);
+  const peakAgo = 23 - buckets.indexOf(peak);
+  setText('log-peak', peak ? `${peak} / h · ${peakAgo === 0 ? 'última hora' : `há ${peakAgo} h`}` : '—');
+  setText('log-count', rows.length);
+
+  /* Stream: só redesenha se algo mudou (preserva a rolagem) */
+  const q = state.logQuery.toLowerCase();
+  const sig = `${rows.length}|${state.allLogLines.at(-1) || ''}|${state.logLevel}|${q}|${[...state.logSourcesOff].join()}|${state.logSelected}`;
+  if (sig === state.logSig && el.children.length) return;
+  state.logSig = sig;
+  const shown = filteredLogRows();
+  setText('log-shown', shown.length);
+  if (!shown.length) {
+    el.innerHTML = `<div class="empty-state">${rows.length ? 'Nenhuma linha com esse filtro.' : 'Nenhum log encontrado.'}</div>`;
+    return;
+  }
+  el.replaceChildren(...shown.slice().reverse().map(r => {
+    const div = document.createElement('div');
+    div.className = `stream-row lvl-${r.tag.toLowerCase()}${r.test ? ' is-test' : ''}${r.n === state.logSelected ? ' is-selected' : ''}`;
+    div.dataset.n = r.n;
+    div.innerHTML = `
+      <span class="sr-ts">${escHtml(r.line.match(/\[([^\]]+)\]/)?.[1] || r.time)}</span>
+      <span class="sr-lvl">${r.tag}</span>
+      <span class="sr-src">${escHtml(LOG_SOURCES.find(s => s.key === r.src).name)}</span>
+      <span class="sr-msg">${escHtml(r.msg)}</span>`;
+    return div;
+  }));
+}
+
+function filteredLogRows() {
+  const q = state.logQuery.toLowerCase();
+  return parsedLogs().filter(r =>
+    (state.logLevel === 'ALL' || r.tag === state.logLevel)
+    && !state.logSourcesOff.has(r.src)
+    && (!q || r.line.toLowerCase().includes(q)));
+}
+
+function showLogDetail(n) {
+  const r = parsedLogs().find(x => x.n === n);
+  const el = document.getElementById('log-detail');
+  if (!r || !el) return;
+  state.logSelected = n;
+  document.querySelectorAll('.stream-row.is-selected').forEach(x => x.classList.remove('is-selected'));
+  document.querySelector(`.stream-row[data-n="${n}"]`)?.classList.add('is-selected');
+  const rowsHtml = [
+    ['TIMESTAMP', r.line.match(/\[([^\]]+)\]/)?.[1] || '—'],
+    ['FONTE', LOG_SOURCES.find(s => s.key === r.src).name],
+    ['NÍVEL', r.tag],
+    ['IP', r.ip || '—'],
+    ['TIPO', r.kind || '—'],
+    ['LOCAL', r.loc || '—'],
+    ['LINHA', `#${r.n} de ${state.allLogLines.length} carregadas`],
+  ].map(([k, v]) => `<div class="stat-row"><span>${k}</span><strong>${escHtml(v)}</strong></div>`).join('');
+  el.innerHTML = `${rowsHtml}<pre class="raw-line">${escHtml(r.line)}</pre>`;
+}
+
+function exportLogs(fmt) {
+  const rows = filteredLogRows();
+  const pick = r => ({ linha: r.n, timestamp: r.line.match(/\[([^\]]+)\]/)?.[1] || '', nivel: r.tag,
+    fonte: LOG_SOURCES.find(s => s.key === r.src).name, texto: r.line });
+  let data, type;
+  if (fmt === 'json') { data = JSON.stringify(rows.map(pick), null, 2); type = 'application/json'; }
+  else if (fmt === 'csv') {
+    const esc = v => `"${String(v).replace(/"/g, '""')}"`;
+    data = ['linha,timestamp,nivel,fonte,texto', ...rows.map(r => Object.values(pick(r)).map(esc).join(','))].join('\n');
+    type = 'text/csv';
+  } else { data = rows.map(r => r.line).join('\n'); type = 'text/plain'; }
+  const url = URL.createObjectURL(new Blob([data], { type }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `ataques-log.${fmt}`;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function filterFullLogs(query) { state.logQuery = query || ''; renderFullLogs(); }
+function fetchAndRenderFullLogs() {
+  fetch('/api/logs?n=500').then(r => r.json()).then(d => {
+    state.allLogLines = d.lines || [];
+    renderFullLogs();
+  }).catch(() => {});
+}
+function refreshLogsPage() { fetchAndRenderFullLogs(); }
+
+/* ════════════ MÓDULO 05 · REDE ════════════ */
+function renderNetPage() {
+  const sys = state.system;
+  if (!sys) return;
+  const net = sys.network;
+
+  const ifEl = document.getElementById('net-ifaces');
+  if (ifEl) {
+    const list = net.interfaces.slice().sort((a, b) => (b.up - a.up) || a.name.localeCompare(b.name)).slice(0, 8);
+    const rate = n => n.in_mbps == null ? '—' : `${n.in_mbps.toFixed(1)} / ${n.out_mbps.toFixed(1)} Mbps`;
+    ifEl.innerHTML = list.map(n => `<tr><td>${escHtml(n.name)}</td><td>${escHtml(n.ip || '—')}</td>
+      <td><span class="act ${n.up ? 'act-up' : 'act-down'}">${n.up ? 'UP' : 'DOWN'}</span></td><td>${rate(n)}</td></tr>`).join('')
+      || '<tr><td colspan="4" class="empty-state">Nenhuma interface.</td></tr>';
+  }
+
+  /* Protocolos: porta conhecida da conexão (remota, senão local) */
+  const byProto = new Map();
+  for (const c of net.connections) {
+    const name = portLabel(c.raddr?.port) || portLabel(c.laddr?.port) || 'OUTROS';
+    const key = name === 'OUTROS' ? name : `${name} ${KNOWN_PORTS[c.raddr?.port] ? c.raddr.port : c.laddr.port}`;
+    byProto.set(key, (byProto.get(key) || 0) + 1);
+  }
+  const protos = [...byProto.entries()].sort((a, b) => (a[0] === 'OUTROS') - (b[0] === 'OUTROS') || b[1] - a[1]).slice(0, 5);
+  renderBarList('net-protocols', protos.map(([k, n]) => [k, n, false]), 'Nenhuma conexão ativa.', true);
+
+  const blocked = state.ipsBlocked;
+  const cEl = document.getElementById('net-conns');
+  if (cEl) {
+    const fmt = a => a ? `${a.ip.includes(':') ? `[${a.ip}]` : a.ip}:${a.port}` : '—';
+    /* Conexões externas primeiro; loopback (o próprio painel) por último */
+    const ordered = net.connections.slice().sort((a, b) => isLoopback(a.raddr?.ip) - isLoopback(b.raddr?.ip));
+    cEl.innerHTML = ordered.slice(0, 40).map(c => {
+      const isBlocked = c.raddr && blocked.has(c.raddr.ip);
+      const st = c.status === 'ESTABLISHED' ? 'ESTAB' : c.status.replace('_', ' ');
+      return `<tr${isBlocked ? ' class="is-selected"' : ''}><td>${escHtml(fmt(c.laddr))}</td><td>${escHtml(fmt(c.raddr))}</td>
+        <td><span class="act ${isBlocked ? 'act-drop' : c.status === 'ESTABLISHED' ? 'act-up' : 'act-down'}">${escHtml(isBlocked ? 'BLOQUEADO' : st)}</span></td></tr>`;
+    }).join('') || '<tr><td colspan="3" class="empty-state">Nenhuma conexão ativa.</td></tr>';
+  }
+  setText('net-conn-total', net.connections_total);
+
+  const ports = uniquePorts(net.listening);
+  const pEl = document.getElementById('net-ports');
+  if (pEl) {
+    pEl.innerHTML = ports.slice(0, 8).map(p => {
+      const local = p.ips.every(isLoopbackBind);
+      return `<div class="stat-row"><span>${p.port}/tcp ${escHtml((portLabel(p.port) || '').toLowerCase())}</span>
+        <strong class="${local ? 'c-cyan' : 'c-warn'}">${local ? 'LOCAL' : 'ABERTA'}</strong></div>`;
+    }).join('') || '<div class="empty-state">Nenhuma porta em escuta.</div>';
+  }
+  setText('net-services', ports.length);
+  setText('net-alerts', state.alertLog.length);
+}
+
+function isLoopbackBind(ip) { return ip.startsWith('127.') || ip === '::1'; }
+function uniquePorts(listening) {
+  const map = new Map();
+  for (const l of listening) {
+    if (!map.has(l.port)) map.set(l.port, { port: l.port, ips: [] });
+    map.get(l.port).ips.push(l.ip);
+  }
+  return [...map.values()].sort((a, b) => a.port - b.port);
+}
+
+/* ════════════ MÓDULO 06 · CONFIGURAÇÕES ════════════ */
+function setToggle(id, on) { document.getElementById(id)?.classList.toggle('is-on', !!on); }
+
+function renderConfigPage() {
+  const sys = state.system;
+  if (!sys) return;
+  const cfg = sys.config, m = sys.mongodb, ai = sys.ai;
+  setToggle('cfg-auth', cfg.auth_log || cfg.fail2ban_log);
+  setToggle('cfg-eve', cfg.eve_log);
+  setToggle('cfg-email', cfg.email);
+  setToggle('cfg-ai', ai.trained);
+  setText('cfg-ai-sub', ai.trained
+    ? `treinado há ${fmtAgo(Date.now() / 1000 - ai.trained_at)} · ${ai.samples} amostras`
+    : `sem modelo ainda · ${ai.samples} amostras`);
+  setText('cfg-db-uri', m.configured ? `mongodb://••••@${m.host}` : 'não configurado');
+  setText('cfg-db-status', !m.configured ? 'DESATIVADO' : m.online ? `ONLINE · ${m.docs} docs` : 'OFFLINE');
+  setText('cfg-dedup', `${cfg.dedup_window_s} s`);
+  const plat = sys.platform;
+  setText('cfg-fw-backend', plat.startsWith('win') ? 'netsh advfirewall' : plat.startsWith('linux') ? 'iptables / ufw' : 'indisponível');
+  setText('cfg-user', cfg.admin_user);
+  setText('cfg-ratelimit', `${cfg.login_max_attempts} tentativas / ${cfg.login_window_s} s`);
+}
+
+/* Estado de cada módulo para o diagrama do Config e a lista do Sobre */
+function moduleStatus(key) {
+  const sys = state.system;
+  const seen = k => state.sources.has(k);
+  switch (key) {
+    case 'monitor': case 'detector': return seen('monitor') || seen('ai') ? 'on' : 'idle';
+    case 'ai': return sys?.ai?.trained ? 'on' : 'idle';
+    case 'firewall': return state.ipsBlocked.size ? 'on' : 'idle';
+    case 'alerting': return state.alertLog.some(e => !isSimulatedEvent(e.p)) ? 'on' : 'idle';
+    case 'auth': return seen('auth') ? 'on' : sys?.config && !(sys.config.auth_log || sys.config.fail2ban_log) ? 'off' : 'idle';
+    case 'ids': return seen('ids') ? 'on' : sys?.config && !sys.config.eve_log ? 'off' : 'idle';
+    case 'mongo': return !sys ? 'idle' : !sys.mongodb.configured ? 'off' : sys.mongodb.online ? 'on' : 'warn';
+    default: return 'idle';
+  }
+}
+const MODULE_STATUS_TEXT = { on: 'ativo nesta sessão', idle: 'sem eventos', off: 'não configurado', warn: 'offline' };
+
+/* ════════════ SOBRE ════════════ */
+function renderAboutPage() {
+  const sys = state.system;
+  if (sys) {
+    setText('about-uptime', fmtAgo(sys.server_uptime));
+    setText('about-flask', 'ONLINE');
+    setText('about-socket', `${sys.socket_clients} cliente(s)`);
+    const m = sys.mongodb;
+    setText('about-mongo', !m.configured ? 'DESATIVADO' : m.online ? `ONLINE · ${m.docs} docs` : 'OFFLINE');
+    document.getElementById('about-mongo')?.classList.toggle('dot-off', !m.online);
+    setText('about-ai', sys.ai.trained ? `treinado há ${fmtAgo(Date.now() / 1000 - sys.ai.trained_at)}` : 'não treinado');
+    document.getElementById('about-ai')?.classList.toggle('dot-off', !sys.ai.trained);
+  }
+  const list = document.getElementById('about-modules');
+  if (list) {
+    list.innerHTML = MODULES.map(mod => {
+      const st = moduleStatus(mod.key);
+      return `<div class="mod-row st-${st}" title="${MODULE_STATUS_TEXT[st]}">
+        <span>${escHtml(mod.name)}<small>${escHtml(mod.desc)}</small></span><i class="src-dot" aria-label="${MODULE_STATUS_TEXT[st]}"></i></div>`;
+    }).join('');
+  }
+}
+
+/* ════════════ PALCOS EM CANVAS (Firewall, Rede, Config) ════════════ */
+const stages = {};
+function stageFor(id) {
+  if (stages[id]) return stages[id];
+  const canvas = document.getElementById(id);
+  if (!canvas) return null;
+  const st = { canvas, ctx: canvas.getContext('2d'), w: 0, h: 0, hits: [] };
+  const fit = () => {
+    const r = canvas.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    const dpr = window.devicePixelRatio || 1;
+    st.w = r.width; st.h = r.height;
+    canvas.width = Math.round(r.width * dpr); canvas.height = Math.round(r.height * dpr);
+    st.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  };
+  new ResizeObserver(fit).observe(canvas);
+  fit();
+  stages[id] = st;
+  return st;
+}
+
+let stageLast = 0;
+function stagesFrame(now) {
+  requestAnimationFrame(stagesFrame);
+  if (document.hidden || now - stageLast < 33) return;   /* ~30 fps basta para os palcos */
+  stageLast = now;
+  const s = state.currentSection;
+  if (s === 'firewall') drawFirewallStage(now);
+  if (s === 'net') drawNetStage(now);
+  if (s === 'config') drawConfigStage(now);
+}
+
+function hashAngle(str) {
+  let h = 2166136261;
+  for (const ch of str) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  return ((h >>> 0) % 3600) / 3600 * Math.PI * 2;
+}
+
+function hexPath(ctx, x, y, r) {
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const a = Math.PI / 6 + i * Math.PI / 3;
+    i ? ctx.lineTo(x + r * Math.cos(a), y + r * Math.sin(a)) : ctx.moveTo(x + r * Math.cos(a), y + r * Math.sin(a));
+  }
+  ctx.closePath();
+}
+
+function stageText(ctx, text, x, y, color, size = 11, align = 'center', weight = 600) {
+  ctx.font = `${weight} ${size}px "JetBrains Mono", ui-monospace, monospace`;
+  ctx.textAlign = align;
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = color;
+  ctx.fillText(text, x, y);
+}
+
+/* Firewall: anel de perímetro; vermelho = IP bloqueado (para no anel),
+   ciano = conexão ativa permitida (atravessa até o sensor) */
+function drawFirewallStage(now) {
+  const st = stageFor('fw-canvas');
+  if (!st || !st.w) return;
+  const { ctx, w, h } = st;
+  const c = sysColors(), red = cssVar('--danger');
+  const cx = w / 2, cy = h / 2 - 10, R = Math.min(w, h * 0.92) * 0.34;
+  ctx.clearRect(0, 0, w, h);
+
+  ctx.lineWidth = 1;
+  ctx.setLineDash([2, 6]);
+  ctx.strokeStyle = withAlpha(c.cyan, 0.25);
+  ctx.beginPath(); ctx.arc(cx, cy, R * 1.45, 0, Math.PI * 2); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.strokeStyle = withAlpha(c.cyan, 0.18);
+  ctx.beginPath(); ctx.arc(cx, cy, R * 1.25, 0, Math.PI * 2); ctx.stroke();
+
+  /* Perímetro com brilho e segmentos girando */
+  ctx.save();
+  ctx.shadowColor = c.neon; ctx.shadowBlur = 18;
+  ctx.strokeStyle = c.neon; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+  ctx.strokeStyle = withAlpha(c.neon, 0.5); ctx.lineWidth = 1.5;
+  ctx.setLineDash([22, 14]); ctx.lineDashOffset = -now / 60;
+  ctx.beginPath(); ctx.arc(cx, cy, R * 0.93, 0, Math.PI * 2); ctx.stroke();
+  ctx.setLineDash([4, 6]); ctx.strokeStyle = withAlpha(c.cyan, 0.4); ctx.lineDashOffset = 0;
+  ctx.beginPath(); ctx.arc(cx, cy, R * 0.62, 0, Math.PI * 2); ctx.stroke();
+  ctx.setLineDash([]);
+
+  /* Sensor */
+  const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 0.45);
+  glow.addColorStop(0, withAlpha(c.neon, 0.18)); glow.addColorStop(1, withAlpha(c.neon, 0));
+  ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(cx, cy, R * 0.45, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = withAlpha(c.neon, 0.35); ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(cx, cy, R * 0.34, 0, Math.PI * 2); ctx.stroke();
+  hexPath(ctx, cx, cy, R * 0.26);
+  ctx.fillStyle = withAlpha(c.neon, 0.08); ctx.fill();
+  ctx.save(); ctx.shadowColor = c.neon; ctx.shadowBlur = 12;
+  ctx.strokeStyle = c.neon; ctx.lineWidth = 2; ctx.stroke(); ctx.restore();
+  stageText(ctx, 'SENSOR', cx, cy - 6, c.neon, 14, 'center', 700);
+  stageText(ctx, 'PROTEGIDO', cx, cy + 14, withAlpha(c.neon, 0.75), 9.5, 'center', 500);
+
+  const plat = state.system?.platform || '';
+  stageText(ctx, 'INTERNET', cx, cy - R * 1.45 - 14, withAlpha(c.cyan, 0.8), 10.5, 'center', 500);
+  stageText(ctx, `PERÍMETRO // ${plat.startsWith('win') ? 'netsh' : 'iptables'}`, cx, cy - R - 16, withAlpha(c.neon, 0.85), 10.5, 'center', 500);
+  stageText(ctx, 'REDE INTERNA', cx, cy - R * 0.62 - 12, withAlpha(c.cyan, 0.7), 10, 'center', 500);
+
+  /* IPs bloqueados: ponto fora, linha até o anel, X no ponto de bloqueio */
+  for (const b of realBlocks()) {
+    const a = hashAngle(b.ip);
+    const ox = cx + Math.cos(a) * R * 1.38, oy = cy + Math.sin(a) * R * 1.38;
+    const ix = cx + Math.cos(a) * R, iy = cy + Math.sin(a) * R;
+    ctx.strokeStyle = withAlpha(red, 0.6); ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(ix, iy); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = red; ctx.beginPath(); ctx.arc(ox, oy, 3.5, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = red; ctx.lineWidth = 1.3;
+    ctx.beginPath(); ctx.arc(ix, iy, 6, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(ix - 3.5, iy - 3.5); ctx.lineTo(ix + 3.5, iy + 3.5); ctx.moveTo(ix + 3.5, iy - 3.5); ctx.lineTo(ix - 3.5, iy + 3.5); ctx.stroke();
+    stageText(ctx, b.ip, ox + (Math.cos(a) >= 0 ? 8 : -8), oy - 10, withAlpha(red, 0.9), 9.5, Math.cos(a) >= 0 ? 'left' : 'right', 500);
+  }
+
+  /* Conexões permitidas (reais, de /api/system), atravessando o perímetro */
+  const peers = [...new Set((state.system?.network.connections || [])
+    .filter(x => x.raddr && !isLoopback(x.raddr.ip) && !state.ipsBlocked.has(x.raddr.ip)).map(x => x.raddr.ip))].slice(0, 18);
+  peers.forEach((ip, i) => {
+    const a = hashAngle(ip);
+    const ox = cx + Math.cos(a) * R * 1.52, oy = cy + Math.sin(a) * R * 1.52;
+    const ix = cx + Math.cos(a) * R * 0.62, iy = cy + Math.sin(a) * R * 0.62;
+    ctx.strokeStyle = withAlpha(c.cyan, 0.35); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(ix, iy); ctx.stroke();
+    const t = ((now / 2600) + i / peers.length) % 1;
+    ctx.fillStyle = c.cyan;
+    ctx.beginPath(); ctx.arc(ox + (ix - ox) * t, oy + (iy - oy) * t, 2.2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(ox, oy, 2.6, 0, Math.PI * 2); ctx.fill();
+  });
+
+  if (!state.ipsBlocked.size) {
+    stageText(ctx, 'Nenhum IP bloqueado nesta sessão', cx, cy + R * 1.52 + 26, withAlpha(c.cyan, 0.6), 10, 'center', 400);
+  }
+}
+
+/* Rede: internet (pares remotos reais) → firewall → sensor → serviços em escuta */
+function drawNetStage(now) {
+  const st = stageFor('net-canvas');
+  if (!st || !st.w) return;
+  const { ctx, w, h } = st;
+  const c = sysColors(), red = cssVar('--danger'), warn = c.warn2;
+  ctx.clearRect(0, 0, w, h);
+  st.hits = [];
+  const sys = state.system;
+  if (!sys) { stageText(ctx, 'Carregando topologia…', w / 2, h / 2, withAlpha(c.cyan, 0.6), 11, 'center', 400); return; }
+
+  const cx = w / 2;
+  const yNet = h * 0.2, yFw = h * 0.42, ySen = h * 0.6, ySvc = h * 0.84;
+  const hexR = Math.min(34, w * 0.05);
+  const node = (x, y, r, color, label, sub, info, big = false) => {
+    if (big) {
+      ctx.strokeStyle = withAlpha(color, 0.25); ctx.setLineDash([2, 5]);
+      ctx.beginPath(); ctx.arc(x, y, r * 1.6, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+    }
+    hexPath(ctx, x, y, r);
+    ctx.fillStyle = withAlpha(color, 0.08); ctx.fill();
+    ctx.save(); ctx.shadowColor = color; ctx.shadowBlur = big ? 14 : 6;
+    ctx.strokeStyle = color; ctx.lineWidth = big ? 2 : 1.4; ctx.stroke(); ctx.restore();
+    ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, y, big ? 5 : 3.5, 0, Math.PI * 2); ctx.fill();
+    stageText(ctx, label, x + r + 10, y - 7, color, 11, 'left', 700);
+    if (sub) stageText(ctx, sub, x + r + 10, y + 8, withAlpha(color, 0.7), 9.5, 'left', 400);
+    st.hits.push({ x, y, r: r + 6, info });
+  };
+  const link = (x1, y1, x2, y2, color, dashed) => {
+    ctx.strokeStyle = withAlpha(color, dashed ? 0.55 : 0.8); ctx.lineWidth = dashed ? 1 : 1.6;
+    ctx.setLineDash(dashed ? [4, 5] : []); ctx.lineDashOffset = dashed ? -now / 50 : 0;
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); ctx.setLineDash([]);
+  };
+
+  /* Pares remotos em leque acima da internet */
+  const peers = [];
+  for (const conn of sys.network.connections) {
+    if (!conn.raddr || isLoopback(conn.raddr.ip) || peers.some(p => p.ip === conn.raddr.ip)) continue;
+    peers.push({ ip: conn.raddr.ip, port: conn.raddr.port, status: conn.status });
+  }
+  const fan = peers.slice(0, 14);
+  fan.forEach((p, i) => {
+    const t = fan.length === 1 ? 0.5 : i / (fan.length - 1);
+    const x = cx + (t - 0.5) * Math.min(w * 0.8, 640), y = yNet - 40 - Math.sin(t * Math.PI) * 50;
+    const bad = state.ipsBlocked.has(p.ip);
+    const col = bad ? red : c.cyan;
+    ctx.strokeStyle = withAlpha(col, 0.45); ctx.setLineDash([2, 4]);
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(cx, yNet); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, 3.2, 0, Math.PI * 2); ctx.fill();
+    st.hits.push({ x, y, r: 9, info: { kind: 'PAR REMOTO', rows: [['IP', p.ip], ['PORTA REMOTA', `${p.port}${portLabel(p.port) ? ` (${portLabel(p.port)})` : ''}`], ['ESTADO', p.status], ['BLOQUEADO', bad ? 'sim (sessão)' : 'não']] } });
+  });
+
+  link(cx, yNet, cx, yFw, c.neon, false);
+  link(cx, yFw, cx, ySen, c.neon, false);
+  const plat = sys.platform;
+  node(cx, yNet, hexR * 0.9, c.cyan, 'INTERNET', `${peers.length} pares remotos`,
+    { kind: 'INTERNET', rows: [['PARES REMOTOS', String(peers.length)], ['CONEXÕES', String(sys.network.connections_total)]] });
+  node(cx, yFw, hexR * 1.15, c.neon, 'FIREWALL', plat.startsWith('win') ? 'netsh' : 'iptables',
+    { kind: 'FIREWALL', rows: [['BACKEND', plat.startsWith('win') ? 'netsh advfirewall' : plat.startsWith('linux') ? 'iptables / ufw' : 'indisponível'], ['IPs BLOQUEADOS', String(state.ipsBlocked.size)]] }, true);
+
+  /* Serviços em escuta abaixo do sensor */
+  const ports = uniquePorts(sys.network.listening).slice(0, 6);
+  ports.forEach((p, i) => {
+    const t = ports.length === 1 ? 0.5 : i / (ports.length - 1);
+    const x = cx + (t - 0.5) * Math.min(w * 0.6, 560), y = ySvc + (i % 2 ? 26 : 0);
+    const local = p.ips.every(isLoopbackBind);
+    const col = local ? c.cyan : warn;
+    link(cx, ySen, x, y, col, true);
+    node(x, y, hexR * 0.75, col, portLabel(p.port) || `PORTA ${p.port}`, `:${p.port} · ${local ? 'local' : 'aberta'}`,
+      { kind: 'SERVIÇO', rows: [['PORTA', `${p.port}/tcp`], ['SERVIÇO', portLabel(p.port) || 'desconhecido'], ['ESCUTA EM', p.ips.join(', ')],
+        ['CONEXÕES', String(sys.network.connections.filter(x => x.laddr?.port === p.port).length)], ['EXPOSIÇÃO', local ? 'só local' : 'aceita conexões externas']] });
+  });
+  node(cx, ySen, hexR * 1.25, c.neon, 'SENSOR', 'DataSentinel',
+    { kind: 'SENSOR', rows: [['PLATAFORMA', plat], ['SERVIÇOS', String(uniquePorts(sys.network.listening).length)], ['UPTIME', fmtAgo(sys.server_uptime)]] }, true);
+}
+
+/* Config: núcleo com os 8 módulos em órbita, cor = estado real */
+function drawConfigStage(now) {
+  const st = stageFor('cfg-canvas');
+  if (!st || !st.w) return;
+  const { ctx, w, h } = st;
+  const c = sysColors();
+  const colorOf = { on: c.neon, idle: c.cyan, off: cssVar('--muted'), warn: c.warn2 };
+  ctx.clearRect(0, 0, w, h);
+  /* Raio limitado pela largura: os nomes dos módulos ficam fora do anel */
+  const cx = w / 2, cy = h / 2 - 10, R = Math.min(w * 0.26, h * 0.34);
+
+  ctx.setLineDash([2, 6]); ctx.strokeStyle = withAlpha(c.neon, 0.22); ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(cx, cy, R * 1.12, 0, Math.PI * 2); ctx.stroke();
+  ctx.setLineDash([]); ctx.strokeStyle = withAlpha(c.neon, 0.3);
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
+  ctx.setLineDash([16, 10]); ctx.lineDashOffset = now / 80; ctx.strokeStyle = withAlpha(c.neon, 0.45);
+  ctx.beginPath(); ctx.arc(cx, cy, R * 0.6, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+
+  MODULES.forEach((mod, i) => {
+    const a = -Math.PI / 2 + i / MODULES.length * Math.PI * 2;
+    const x = cx + Math.cos(a) * R, y = cy + Math.sin(a) * R;
+    const stt = moduleStatus(mod.key);
+    const col = colorOf[stt];
+    ctx.strokeStyle = withAlpha(col, 0.4); ctx.setLineDash([3, 5]);
+    ctx.beginPath(); ctx.moveTo(cx + Math.cos(a) * R * 0.42, cy + Math.sin(a) * R * 0.42); ctx.lineTo(x, y); ctx.stroke(); ctx.setLineDash([]);
+    if (stt === 'on') {
+      const ph = ((now / 1800) + i / 8) % 1;
+      ctx.strokeStyle = withAlpha(col, 0.5 * (1 - ph));
+      ctx.beginPath(); ctx.arc(x, y, 8 + ph * 14, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.strokeStyle = col; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
+    const right = Math.cos(a) > 0.2, left = Math.cos(a) < -0.2;
+    stageText(ctx, mod.name, x + (right ? 14 : left ? -14 : 0), y + (right || left ? 0 : Math.sin(a) < 0 ? -18 : 20),
+      col, 11, right ? 'left' : left ? 'right' : 'center', 500);
+  });
+
+  ctx.save(); ctx.shadowColor = c.neon; ctx.shadowBlur = 20;
+  ctx.strokeStyle = c.neon; ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.arc(cx, cy, R * 0.4, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+  ctx.fillStyle = withAlpha(c.neon, 0.06); ctx.beginPath(); ctx.arc(cx, cy, R * 0.4, 0, Math.PI * 2); ctx.fill();
+  const active = MODULES.filter(m => moduleStatus(m.key) === 'on').length;
+  stageText(ctx, 'CORE', cx, cy - 8, c.neon, 15, 'center', 700);
+  stageText(ctx, `${active} / ${MODULES.length} ativos`, cx, cy + 12, withAlpha(c.neon, 0.75), 10, 'center', 400);
+
+  const legend = [['ativo', colorOf.on], ['sem eventos', colorOf.idle], ['não configurado', colorOf.off], ['offline', colorOf.warn]];
+  legend.forEach(([t, col], i) => {
+    const lx = cx - 210 + i * 110, ly = cy + R * 1.12 + 26;
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(lx, ly, 3.5, 0, Math.PI * 2); ctx.fill();
+    stageText(ctx, t, lx + 8, ly, withAlpha(col, 0.9), 9.5, 'left', 400);
+  });
+}
+
+/* ════════════ CONTROLES ════════════ */
+function bindPageControls() {
+  document.getElementById('atk-filter')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-filter]');
+    if (!b) return;
+    state.atkFilter = b.dataset.filter;
+    b.parentElement.querySelectorAll('.chip').forEach(x => x.classList.toggle('is-on', x === b));
+    refreshAttacksPage();
+  });
+  document.getElementById('log-levels')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-level]');
+    if (!b) return;
+    state.logLevel = b.dataset.level;
+    renderFullLogs();
+  });
+  document.getElementById('log-sources')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-src]');
+    if (!b) return;
+    const k = b.dataset.src;
+    state.logSourcesOff.has(k) ? state.logSourcesOff.delete(k) : state.logSourcesOff.add(k);
+    renderFullLogs();
+  });
+  document.getElementById('logs-full-container')?.addEventListener('click', e => {
+    const row = e.target.closest('.stream-row');
+    if (row) showLogDetail(Number(row.dataset.n));
+  });
+  document.querySelector('.export-row')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-export]');
+    if (!b) return;
+    b.parentElement.querySelectorAll('[data-export]').forEach(x => x.classList.toggle('is-on', x === b));
+    exportLogs(b.dataset.export);
+  });
+  const netCanvas = document.getElementById('net-canvas');
+  netCanvas?.addEventListener('click', e => {
+    const st = stages['net-canvas'];
+    if (!st) return;
+    const r = netCanvas.getBoundingClientRect();
+    const mx = e.clientX - r.left, my = e.clientY - r.top;
+    const hit = st.hits.find(n => Math.hypot(n.x - mx, n.y - my) < n.r);
+    if (!hit) return;
+    setText('net-node-kind', hit.info.kind);
+    const el = document.getElementById('net-node');
+    if (el) el.innerHTML = hit.info.rows.map(([k, v]) => `<div class="stat-row"><span>${escHtml(k)}</span><strong>${escHtml(v)}</strong></div>`).join('');
+  });
+  netCanvas?.addEventListener('mousemove', e => {
+    const st = stages['net-canvas'];
+    if (!st) return;
+    const r = netCanvas.getBoundingClientRect();
+    const over = st.hits.some(n => Math.hypot(n.x - (e.clientX - r.left), n.y - (e.clientY - r.top)) < n.r);
+    netCanvas.style.cursor = over ? 'pointer' : '';
+  });
+}
+
+/* O mesmo globo do dashboard é usado na página Ataques (move o elemento) */
+function placeGlobe(section) {
+  const map = document.getElementById('threat-map');
+  if (!map) return;
+  const target = section === 'ataques'
+    ? document.getElementById('atk-globe-slot')
+    : document.querySelector('.intel-stage .map-leaflet-wrap');
+  if (target && map.parentElement !== target) {
+    target.prepend(map);
+    setTimeout(resizeGlobe, 30);
+  }
 }
 
 /* ────────────────── SOCKET.IO ────────────────── */
@@ -2011,6 +2838,7 @@ function handleNewAlert(payload) {
   if (ip) {
     const seen = state.ipSeen.get(ip);
     state.ipSeen.set(ip, { first: seen ? seen.first : at, last: at });
+    state.ipLastAlert.set(ip, payload);
   }
   const src = sourceLabel(payload).key;
   const srcState = state.sources.get(src) || { count: 0, last: 0 };
@@ -2322,6 +3150,10 @@ document.addEventListener('DOMContentLoaded', () => {
   ensureChart();
   renderIntelPanels();
   setInterval(renderIntelPanels, 5000);
+  bindPageControls();
+  pollSystem();
+  setInterval(pollSystem, SYSTEM_POLL_MS);
+  requestAnimationFrame(stagesFrame);
   setInterval(updateStageHud, 250);
   initHackerBinary();
   initEcg();

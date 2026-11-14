@@ -51,3 +51,23 @@ def get_alerts(limit=100):
 
 
 init_db()
+
+
+def status():
+    """Estado do MongoDB para o painel: configurado, online e total de
+    documentos. Usa um cliente proprio com timeout curto para a tela nunca
+    travar esperando o banco (o cliente principal usa o timeout padrao)."""
+    if not MONGODB_URI:
+        return {"configured": False, "online": False, "docs": None, "host": None}
+    # So o host aparece no painel: usuario e senha da URI nunca saem daqui
+    host = MONGODB_URI.split("://", 1)[-1].split("@")[-1].split("/")[0].split("?")[0]
+    try:
+        client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=1500)
+        try:
+            client.admin.command("ping")
+            docs = client[MONGODB_DB_NAME]["alerts"].estimated_document_count()
+        finally:
+            client.close()
+        return {"configured": True, "online": True, "docs": docs, "host": host}
+    except Exception:
+        return {"configured": True, "online": False, "docs": None, "host": host}

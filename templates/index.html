@@ -44,21 +44,15 @@
   <!-- ─── TOP HEADER BAR (central de inteligência) ─── -->
   <header class="topbar">
     <div class="topbar-brand">
-      <div class="brand-shield" aria-hidden="true">
-        <svg viewBox="0 0 48 48" width="42" height="42" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <linearGradient id="sg" x1="8" y1="4" x2="40" y2="44" gradientUnits="userSpaceOnUse">
-              <stop stop-color="#4dff9a"/><stop offset="1" stop-color="#0a3d24"/>
-            </linearGradient>
-            <filter id="sg-glow"><feGaussianBlur stdDeviation="1.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-          </defs>
-          <path d="M24 4 L42 10 V22 C42 34 32 42 24 44 C16 42 6 34 6 22 V10 Z" stroke="url(#sg)" stroke-width="1.4" fill="rgba(4,18,14,0.85)" filter="url(#sg-glow)"/>
-          <path d="M24 12 L34 16 V24 C34 31 27 36 24 37 C21 36 14 31 14 24 V16 Z" stroke="rgba(157,255,198,0.35)" stroke-width="0.8" fill="none"/>
+      <div class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 48 48" width="46" height="46" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="9" y="9" width="30" height="30" transform="rotate(45 24 24)" stroke="#4dff9a" stroke-width="2" fill="rgba(4,18,14,0.85)"/>
+          <rect x="18" y="18" width="12" height="12" transform="rotate(45 24 24)" fill="#4dff9a"/>
         </svg>
       </div>
       <div class="brand-text">
         <div class="topbar-logo">DataSentinel</div>
-        <div class="topbar-sub">CYBER DEFENSE SYSTEM // THREAT INTELLIGENCE</div>
+        <div class="topbar-sub">THREAT INTELLIGENCE CENTER // PYTHON</div>
       </div>
     </div>
 
@@ -76,11 +70,9 @@
 
     <div class="topbar-readouts mono">
       <div class="hud-readout"><span class="hud-k">FLASK-SOCKETIO</span><span class="hud-v" id="socket-status">CONECTANDO</span></div>
-      <div class="hud-readout"><span class="hud-k">ALERTAS</span><span class="hud-v" id="metric-threats">—</span></div>
-      <div class="hud-readout"><span class="hud-k">TENTATIVAS</span><span class="hud-v" id="metric-connections">—</span></div>
-      <div class="hud-readout"><span class="hud-k">IPS</span><span class="hud-v" id="metric-unique-ips">0</span></div>
+      <div class="hud-readout"><span class="hud-k">MONGODB</span><span class="hud-v" id="hud-mongo">—</span></div>
       <div class="hud-readout"><span class="hud-k">EVENTOS/MIN</span><span class="hud-v" id="hud-epm">0</span></div>
-      <div class="hud-readout hud-clock"><span class="hud-k" id="clock-date">--/--/----</span><span class="hud-v" id="clock-time">--:--:--</span></div>
+      <div class="hud-readout hud-clock"><span class="hud-k" id="clock-zone">UTC</span><span class="hud-v" id="clock-time">--:--:--</span></div>
     </div>
     <button type="button" id="btnLogout" class="btn-logout mono" title="Sair">⏻ SAIR</button>
     <form id="logout-form" action="/logout" method="post" style="display:none;">
@@ -92,6 +84,7 @@
 
     <!-- ─── MAIN CONTENT ─── -->
     <main class="main">
+      <div class="page-sim-banner mono" id="page-sim-banner" hidden>⚠ CONTÉM EVENTOS SIMULADOS (TESTE)</div>
 
       <!-- ═══════════════════════════════════════════
            SEÇÃO: DASHBOARD (central de inteligência)
@@ -200,225 +193,51 @@
           </div>
         </div>
 
-        <!-- LINHA DO TEMPO -->
-        <div class="intel-timeline mono">
-          <span class="tl-label">LINHA DO TEMPO</span>
-          <span class="tl-range">−30 MIN</span>
-          <div class="tl-track" id="intel-timeline" aria-label="Alertas dos últimos 30 minutos"></div>
-          <span class="tl-range">AGORA</span>
-          <span class="tl-stats">ALERTAS 30 MIN <b id="tl-count">0</b> · SIMULADOS <b id="tl-sim">0</b></span>
-        </div>
       </section>
 
       <!-- ═══════════════════════════════════════════
-           SEÇÃO: ATAQUES
+           MÓDULO 02 · ATAQUES
       ═══════════════════════════════════════════ -->
-      <section class="section-content" data-section="ataques">
-        <div class="page-header">
-          <div><h1>ATAQUES</h1><p>Fluxo de ataques detectados em tempo real</p></div>
-          <span class="live-badge mono">● LIVE</span>
+      <section class="section-content page" data-section="ataques">
+        <div class="mod-head">
+          <div><p class="mod-kicker mono">MÓDULO 02 // DETECÇÃO E RASTREAMENTO</p><h1 class="mod-title mono">ATAQUES</h1></div>
         </div>
-        <div class="ataques-grid">
-          <div class="panel ataques-feed-panel">
-            <div class="panel-header"><h2>EVENTOS RECENTES</h2></div>
-            <div class="attack-log-header mono">
-              <span>HORA</span><span>TIPO</span><span>DESCRIÇÃO</span><span>IP</span><span>PAÍS</span>
+        <div class="atk-layout">
+          <div class="atk-globe-col">
+            <div class="big-stats mono">
+              <div><b id="atk-24h">0</b><span>ATAQUES 24H</span></div>
+              <div class="is-red"><b id="atk-blocked">0</b><span>IPs BLOQUEADOS</span></div>
+              <div><b id="atk-ips">0</b><span>IPs ÚNICOS</span></div>
             </div>
-            <div class="attacks-full-feed mono" id="attacks-page-feed"></div>
+            <div class="globe-slot" id="atk-globe-slot"></div>
+            <div class="slot-caption mono" id="atk-globe-caption">VARREDURA GLOBAL · 0 ORIGENS ATIVAS</div>
           </div>
-          <div class="ataques-right">
-            <div class="panel">
-              <div class="panel-header"><h2>TIPOS DE ATAQUE</h2></div>
-              <div class="attack-type-list" id="attack-type-list"></div>
-              <div style="height:160px;margin-top:12px">
-                <canvas id="attacks-page-donut" aria-label="Distribuição por tipo"></canvas>
+          <div class="atk-side">
+            <div class="panel hud-panel atk-table-panel">
+              <div class="panel-header"><h2>ATAQUES DETECTADOS</h2><span class="panel-code mono">LIVE · SOCKET.IO</span></div>
+              <div class="chip-group mono" id="atk-filter" role="group" aria-label="Filtrar por fonte">
+                <button type="button" class="chip is-on" data-filter="all">TODOS</button>
+                <button type="button" class="chip" data-filter="monitor">LIMIAR</button>
+                <button type="button" class="chip" data-filter="ai">IA</button>
+                <button type="button" class="chip" data-filter="auth">AUTH</button>
+                <button type="button" class="chip" data-filter="ids">IDS</button>
+                <button type="button" class="chip" data-filter="test">TESTE</button>
               </div>
-            </div>
-            <div class="panel atk-stats-panel">
-              <div class="panel-header"><h2>ESTATÍSTICAS</h2></div>
-              <div class="stat-rows">
-                <div class="stat-row"><span>Total eventos</span><strong class="mono" id="atk-total">0</strong></div>
-                <div class="stat-row"><span>IPs únicos</span><strong class="mono" id="atk-ips">0</strong></div>
-                <div class="stat-row"><span>Países</span><strong class="mono" id="atk-countries">0</strong></div>
-                <div class="stat-row"><span>Último evento</span><strong class="mono" id="atk-last">—</strong></div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ═══════════════════════════════════════════
-           SEÇÃO: FIREWALL
-      ═══════════════════════════════════════════ -->
-      <section class="section-content" data-section="firewall">
-        <div class="page-header">
-          <div><h1>FIREWALL</h1><p>Regras ativas e IPs bloqueados</p></div>
-          <span class="status-chip green mono">● ATIVO</span>
-        </div>
-        <div class="fw-kpi-row">
-          <div class="mini-kpi"><div class="mini-kpi-val mono" id="fw-blocked">0</div><div class="mini-kpi-label">IPs Bloqueados</div></div>
-          <div class="mini-kpi"><div class="mini-kpi-val mono">7</div><div class="mini-kpi-label">Regras (ilustrativas)</div></div>
-          <div class="mini-kpi"><div class="mini-kpi-val mono green">ATIVO</div><div class="mini-kpi-label">Status</div></div>
-          <div class="mini-kpi"><div class="mini-kpi-val mono" id="fw-threats">0</div><div class="mini-kpi-label">Ameaças Bloq.</div></div>
-        </div>
-        <div class="fw-grid">
-          <div class="panel fw-ips-panel">
-            <div class="panel-header"><h2>IPS BLOQUEADOS</h2><span class="badge-count mono" id="fw-ip-count">0</span></div>
-            <div class="fw-ips-list mono" id="fw-ips-list">
-              <div class="empty-state">Aguardando eventos de rede…</div>
-            </div>
-          </div>
-          <div class="panel fw-rules-panel">
-            <div class="panel-header"><h2>REGRAS ATIVAS</h2><span class="panel-code is-warn mono" title="Esta tabela é fixa no HTML; não é lida do netsh/iptables">ILUSTRATIVO · NÃO LIDO DO FIREWALL</span></div>
-            <table class="fw-table mono">
-              <thead><tr><th>ID</th><th>AÇÃO</th><th>ORIGEM</th><th>ALVO</th><th>STATUS</th><th>EVENTOS</th></tr></thead>
-              <tbody>
-                <tr><td>001</td><td class="deny">DENY</td><td>0.0.0.0/0</td><td>TCP:22</td><td class="active">ATIVO</td><td id="fw-r1">—</td></tr>
-                <tr><td>002</td><td class="deny">DENY</td><td>0.0.0.0/0</td><td>TCP:3389</td><td class="active">ATIVO</td><td>—</td></tr>
-                <tr><td>003</td><td class="deny">DENY</td><td>0.0.0.0/0</td><td>SQLi Pattern</td><td class="active">ATIVO</td><td>—</td></tr>
-                <tr><td>004</td><td class="deny">DENY</td><td>0.0.0.0/0</td><td>Brute Force</td><td class="active">ATIVO</td><td>—</td></tr>
-                <tr><td>005</td><td class="deny">DENY</td><td>0.0.0.0/0</td><td>XSS Pattern</td><td class="active">ATIVO</td><td>—</td></tr>
-                <tr><td>006</td><td class="allow">ALLOW</td><td>192.168.1.0/24</td><td>Any</td><td class="active">ATIVO</td><td>—</td></tr>
-                <tr><td>007</td><td class="allow">ALLOW</td><td>Localhost</td><td>Any</td><td class="active">ATIVO</td><td>—</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      <!-- ═══════════════════════════════════════════
-           SEÇÃO: LOGS
-      ═══════════════════════════════════════════ -->
-      <section class="section-content" data-section="logs">
-        <div class="page-header">
-          <div><h1>LOGS</h1><p>Eventos do sistema · ataques.log</p></div>
-          <div class="log-controls">
-            <input type="search" class="log-search mono" id="log-search" placeholder="Filtrar logs…"/>
-            <button type="button" class="btn-ver-todos mono" id="btn-refresh-logs">↻ ATUALIZAR</button>
-          </div>
-        </div>
-        <div class="panel logs-full-panel">
-          <div class="panel-header">
-            <h2>EVENTOS DO SISTEMA</h2>
-            <span class="mono muted" id="log-count">0 linhas</span>
-          </div>
-          <div class="logs-full-body mono" id="logs-full-container"></div>
-        </div>
-      </section>
-
-      <!-- ═══════════════════════════════════════════
-           SEÇÃO: REDE
-      ═══════════════════════════════════════════ -->
-      <section class="section-content" data-section="net">
-        <div class="page-header">
-          <div><h1>REDE</h1><p>Monitoramento de tráfego e conexões</p></div>
-        </div>
-        <div class="net-kpi-row">
-          <div class="mini-kpi"><div class="mini-kpi-val mono green" id="net-rx-kpi">— MB/s</div><div class="mini-kpi-label">Recebimento</div></div>
-          <div class="mini-kpi"><div class="mini-kpi-val mono cyan" id="net-tx-kpi">— MB/s</div><div class="mini-kpi-label">Envio</div></div>
-          <div class="mini-kpi"><div class="mini-kpi-val mono" id="net-conns-kpi">—</div><div class="mini-kpi-label">Conexões Ativas</div></div>
-          <div class="mini-kpi"><div class="mini-kpi-val mono" id="net-cpu-kpi">—</div><div class="mini-kpi-label">CPU</div></div>
-        </div>
-        <div class="net-charts-grid">
-          <div class="panel">
-            <div class="panel-header">
-              <h2>TRÁFEGO DE REDE</h2>
-              <div class="net-legend">
-                <span class="net-dot green"></span><span class="mono">RX</span>
-                <span class="net-dot cyan"></span><span class="mono">TX</span>
+              <div class="hud-table-wrap">
+                <table class="hud-table mono">
+                  <thead><tr><th>HORA</th><th>IP ORIGEM</th><th>PAÍS</th><th>TIPO</th><th>PORTAS</th><th>SEV.</th><th>FONTE</th></tr></thead>
+                  <tbody id="atk-table"></tbody>
+                </table>
               </div>
             </div>
-            <div class="graph-tall"><canvas id="netPageChart"></canvas></div>
-          </div>
-          <div class="panel">
-            <div class="panel-header"><h2>CONEXÕES ATIVAS</h2></div>
-            <div class="graph-tall"><canvas id="connsPageChart"></canvas></div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ═══════════════════════════════════════════
-           SEÇÃO: CONFIGURAÇÕES
-      ═══════════════════════════════════════════ -->
-      <section class="section-content" data-section="config">
-        <div class="page-header">
-          <div><h1>CONFIGURAÇÕES</h1><p>Parâmetros do sistema DataSentinel</p></div>
-        </div>
-        <div class="config-grid">
-          <div class="panel config-panel">
-            <div class="panel-header"><h2>SISTEMA</h2><span class="panel-code is-warn mono" title="Estes campos não são enviados ao servidor">NÃO PERSISTE</span></div>
-            <div class="config-form">
-              <div class="config-field">
-                <label class="config-label">Arquivo de Log</label>
-                <input type="text" class="config-input mono" value="ataques.log" readonly/>
+            <div class="atk-bottom">
+              <div class="panel hud-panel">
+                <div class="panel-header"><h2>MAPA DE CALOR · HORA × DIA</h2><span class="panel-code mono">7D · ataques.log</span></div>
+                <div class="heatmap mono" id="atk-heatmap"></div>
               </div>
-              <div class="config-field">
-                <label class="config-label">Intervalo de Polling (ms)</label>
-                <input type="number" class="config-input mono" id="cfg-poll" value="2000" min="500" max="30000"/>
-              </div>
-              <div class="config-field">
-                <label class="config-label">Coordenadas do Defensor (Lat)</label>
-                <input type="number" class="config-input mono" id="cfg-lat" value="-23.55" step="0.01"/>
-              </div>
-              <div class="config-field">
-                <label class="config-label">Coordenadas do Defensor (Lon)</label>
-                <input type="number" class="config-input mono" id="cfg-lon" value="-46.63" step="0.01"/>
-              </div>
-              <div class="config-field">
-                <label class="config-label">Máx. Alertas no Painel</label>
-                <input type="number" class="config-input mono" id="cfg-max-alerts" value="30" min="10" max="200"/>
-              </div>
-            </div>
-          </div>
-          <div class="panel config-panel">
-            <div class="panel-header"><h2>ALERTAS E LIMIARES</h2><span class="panel-code is-warn mono" title="Estes campos não são enviados ao servidor">NÃO PERSISTE</span></div>
-            <div class="config-form">
-              <div class="config-field">
-                <label class="config-label">Alerta de CPU (%)</label>
-                <input type="number" class="config-input mono" value="85" min="50" max="99"/>
-              </div>
-              <div class="config-field">
-                <label class="config-label">Alerta de Memória (%)</label>
-                <input type="number" class="config-input mono" value="90" min="50" max="99"/>
-              </div>
-              <div class="config-field">
-                <label class="config-label">Nível de Severidade</label>
-                <select class="config-select mono">
-                  <option>CRÍTICO</option>
-                  <option>ALTO</option>
-                  <option selected>MÉDIO</option>
-                  <option>BAIXO</option>
-                </select>
-              </div>
-              <div class="config-field">
-                <label class="config-label">Modo de Operação</label>
-                <select class="config-select mono">
-                  <option selected>MONITORAMENTO</option>
-                  <option>BLOQUEIO ATIVO</option>
-                  <option>MODO STEALTH</option>
-                </select>
-              </div>
-            </div>
-            <button type="button" class="btn-save mono">💾 SALVAR CONFIGURAÇÕES</button>
-          </div>
-          <div class="panel config-status-panel">
-            <div class="panel-header"><h2>STATUS DE CONEXÃO</h2></div>
-            <div class="conn-status-list">
-              <div class="conn-status-row">
-                <span>Socket.IO</span>
-                <span class="mono status-ok" id="cfg-socket-status">CONECTADO</span>
-              </div>
-              <div class="conn-status-row">
-                <span>API /metrics</span>
-                <span class="mono status-ok">ONLINE</span>
-              </div>
-              <div class="conn-status-row">
-                <span>API /logs</span>
-                <span class="mono status-ok">ONLINE</span>
-              </div>
-              <div class="conn-status-row">
-                <span>Tempo de resposta</span>
-                <span class="mono" id="cfg-latency">—</span>
+              <div class="panel hud-panel">
+                <div class="panel-header"><h2>TOP PAÍSES</h2><span class="panel-code mono">ataques.log</span></div>
+                <div class="bar-list mono" id="atk-countries-list"></div>
               </div>
             </div>
           </div>
@@ -426,68 +245,361 @@
       </section>
 
       <!-- ═══════════════════════════════════════════
-           SEÇÃO: SOBRE
+           MÓDULO 03 · FIREWALL
       ═══════════════════════════════════════════ -->
-      <section class="section-content" data-section="sobre">
-        <div class="about-page">
-          <div class="about-hero">
-            <div class="about-shield" aria-hidden="true">
-              <svg viewBox="0 0 48 48" width="80" height="80" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <defs><linearGradient id="sg2" x1="8" y1="4" x2="40" y2="44" gradientUnits="userSpaceOnUse"><stop stop-color="#4dff9a"/><stop offset="1" stop-color="#0a3d24"/></linearGradient></defs>
-                <path d="M24 4 L42 10 V22 C42 34 32 42 24 44 C16 42 6 34 6 22 V10 Z" stroke="url(#sg2)" stroke-width="1.4" fill="rgba(4,18,14,0.85)"/>
-                <path d="M24 12 L34 16 V24 C34 31 27 36 24 37 C21 36 14 31 14 24 V16 Z" stroke="rgba(157,255,198,0.35)" stroke-width="0.8" fill="none"/>
+      <section class="section-content page" data-section="firewall">
+        <div class="mod-head">
+          <div><p class="mod-kicker mono">MÓDULO 03 // PERÍMETRO E BLOQUEIOS</p><h1 class="mod-title mono">FIREWALL</h1></div>
+        </div>
+        <div class="tri-layout">
+          <div class="page-col">
+            <div class="panel hud-panel">
+              <div class="panel-header"><h2>REGRAS ATIVAS</h2><span class="panel-code mono">firewall.py · sessão</span></div>
+              <div class="hud-table-wrap short">
+                <table class="hud-table mono">
+                  <thead><tr><th>#</th><th>CHAIN</th><th>AÇÃO</th><th>ORIGEM</th><th>PORTA</th><th>HITS</th></tr></thead>
+                  <tbody id="fw-rules"></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="panel hud-panel">
+              <div class="panel-header"><h2>MODO DE PROTEÇÃO</h2><span class="panel-code mono">AUTO</span></div>
+              <div class="opt-list mono">
+                <div class="opt"><span>Bloqueio automático<small>monitores chamam block_ip()</small></span><i class="toggle is-on" aria-label="ativo"></i></div>
+                <div class="opt"><span>Bloqueio por IA (IsolationForest)<small>monitor.py bloqueia anomalias</small></span><i class="toggle is-on" aria-label="ativo"></i></div>
+                <div class="opt"><span>Expiração de bloqueio (TTL)<small>não implementado</small></span><i class="toggle" aria-label="inativo"></i></div>
+                <div class="opt"><span>Geo-block<small>não implementado</small></span><i class="toggle" aria-label="inativo"></i></div>
+              </div>
+            </div>
+            <div class="panel hud-panel grow">
+              <div class="panel-header"><h2>HITS POR HORA</h2><span class="panel-code mono">24H · ataques.log</span></div>
+              <div class="activity-bars fill" id="fw-hours" aria-label="Bloqueios por hora nas últimas 24 horas"></div>
+            </div>
+          </div>
+
+          <div class="stage-col">
+            <canvas class="stage-canvas" id="fw-canvas" aria-label="Perímetro: IPs bloqueados e conexões permitidas"></canvas>
+            <div class="stage-stats mono">
+              <div class="is-red"><b id="fw-blocked">0</b><span>IPs BLOQUEADOS</span></div>
+              <div><b id="fw-rules-count">0</b><span>REGRAS (SESSÃO)</span></div>
+              <div class="is-cyan"><b id="fw-allowed">—</b><span>CONEXÕES PERMITIDAS</span></div>
+            </div>
+          </div>
+
+          <div class="page-col">
+            <div class="panel hud-panel">
+              <div class="panel-header"><h2>IPs BLOQUEADOS</h2><span class="panel-code mono">TTL</span></div>
+              <div class="hud-table-wrap short">
+                <table class="hud-table mono">
+                  <thead><tr><th>IP</th><th>PAÍS</th><th>MOTIVO</th><th>EXPIRA</th></tr></thead>
+                  <tbody id="fw-ips-table"></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="panel hud-panel">
+              <div class="panel-header"><h2>ÚLTIMA AÇÃO</h2><span class="panel-code mono">FW.EVENT</span></div>
+              <div class="last-action mono" id="fw-last-action"><div class="empty-state">Nenhum bloqueio real nesta sessão.</div></div>
+            </div>
+            <div class="panel hud-panel grow">
+              <div class="panel-header"><h2>COMANDO APLICADO</h2><span class="panel-code mono">SHELL</span></div>
+              <div class="shell mono" id="fw-shell"><div class="empty-state">Aguardando um bloqueio real.</div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════
+           MÓDULO 04 · LOGS
+      ═══════════════════════════════════════════ -->
+      <section class="section-content page" data-section="logs">
+        <div class="mod-head">
+          <div><p class="mod-kicker mono">MÓDULO 04 // AUDITORIA E EVENTOS</p><h1 class="mod-title mono">LOGS</h1></div>
+        </div>
+        <div class="tri-layout logs-layout">
+          <div class="page-col">
+            <div class="panel hud-panel">
+              <div class="panel-header"><h2>FONTES</h2><span class="panel-code mono">SOURCES</span></div>
+              <div class="opt-list mono" id="log-sources"></div>
+            </div>
+            <div class="panel hud-panel grow">
+              <div class="panel-header"><h2>NÍVEIS</h2><span class="panel-code mono">ARQUIVO</span></div>
+              <div class="levels-box">
+                <div class="levels-donut"><canvas id="log-donut" aria-label="Linhas por nível"></canvas><div class="levels-center mono"><b id="log-total">0</b><span>LINHAS</span></div></div>
+                <div class="level-list mono" id="log-levels" role="group" aria-label="Filtrar por nível"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel hud-panel console-panel">
+            <div class="panel-header"><h2>STREAM DE LOGS</h2><span class="panel-code mono">TAIL -F · <span id="log-shown">0</span> / <span id="log-count">0</span></span></div>
+            <label class="log-filter mono"><span>⌕ filtro:</span>
+              <input type="search" id="log-search" placeholder="texto, IP, tipo…" aria-label="Filtrar logs" autocomplete="off">
+              <span class="live-dot">AO VIVO ●</span>
+            </label>
+            <div class="logs-full-body mono" id="logs-full-container"></div>
+          </div>
+
+          <div class="page-col">
+            <div class="panel hud-panel">
+              <div class="panel-header"><h2>LINHAS / HORA</h2><span class="panel-code mono">RATE · 24H</span></div>
+              <div class="activity-bars tall" id="log-hours" aria-label="Linhas de log por hora nas últimas 24 horas"></div>
+              <div class="stat-rows mono">
+                <div class="stat-row"><span>média</span><strong id="log-avg">0 / h</strong></div>
+                <div class="stat-row"><span>pico</span><strong id="log-peak">—</strong></div>
+              </div>
+            </div>
+            <div class="panel hud-panel">
+              <div class="panel-header"><h2>LINHA SELECIONADA</h2><span class="panel-code mono">DETALHE</span></div>
+              <div class="last-action mono" id="log-detail"><div class="empty-state">Clique numa linha do stream.</div></div>
+            </div>
+            <div class="panel hud-panel grow">
+              <div class="panel-header"><h2>EXPORTAR</h2><span class="panel-code mono">ARQUIVO</span></div>
+              <div class="chip-group mono export-row">
+                <button type="button" class="chip is-on" data-export="json">JSON</button>
+                <button type="button" class="chip" data-export="csv">CSV</button>
+                <button type="button" class="chip" data-export="txt">TXT</button>
+                <button type="button" class="chip" id="btn-refresh-logs">↻ ATUALIZAR</button>
+              </div>
+              <div class="stat-rows mono">
+                <div class="stat-row"><span>exporta</span><strong>linhas filtradas</strong></div>
+                <div class="stat-row"><span>retenção</span><strong>sem rotação automática</strong></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════
+           MÓDULO 05 · REDE
+      ═══════════════════════════════════════════ -->
+      <section class="section-content page" data-section="net">
+        <div class="mod-head">
+          <div><p class="mod-kicker mono">MÓDULO 05 // TOPOLOGIA E TRÁFEGO</p><h1 class="mod-title mono">REDE</h1></div>
+        </div>
+        <div class="tri-layout">
+          <div class="page-col">
+            <div class="panel hud-panel">
+              <div class="panel-header"><h2>INTERFACES</h2><span class="panel-code mono">psutil</span></div>
+              <div class="hud-table-wrap short">
+                <table class="hud-table mono">
+                  <thead><tr><th>IF</th><th>IP</th><th>ESTADO</th><th>IN / OUT</th></tr></thead>
+                  <tbody id="net-ifaces"></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="panel hud-panel">
+              <div class="panel-header"><h2>LARGURA DE BANDA</h2><span class="panel-code mono">host</span></div>
+              <div class="graph-mid"><canvas id="netPageChart"></canvas></div>
+              <div class="axis-row mono"><span>IN <b id="net-rx-kpi">—</b></span><span>OUT <b id="net-tx-kpi">—</b></span></div>
+            </div>
+            <div class="panel hud-panel grow">
+              <div class="panel-header"><h2>PROTOCOLOS</h2><span class="panel-code mono">CONEXÕES ATIVAS</span></div>
+              <div class="bar-list mono" id="net-protocols"></div>
+            </div>
+          </div>
+
+          <div class="stage-col">
+            <canvas class="stage-canvas" id="net-canvas" aria-label="Topologia: internet, firewall, sensor e serviços"></canvas>
+            <div class="stage-stats mono">
+              <div><b id="net-services">—</b><span>SERVIÇOS</span></div>
+              <div class="is-cyan"><b id="net-conns-kpi">—</b><span>CONEXÕES</span></div>
+              <div class="is-red"><b id="net-alerts">0</b><span>ALERTAS</span></div>
+            </div>
+          </div>
+
+          <div class="page-col">
+            <div class="panel hud-panel">
+              <div class="panel-header"><h2>CONEXÕES ATIVAS</h2><span class="panel-code mono" id="net-conn-total">0</span></div>
+              <div class="hud-table-wrap short">
+                <table class="hud-table mono">
+                  <thead><tr><th>ORIGEM</th><th>DESTINO</th><th>ESTADO</th></tr></thead>
+                  <tbody id="net-conns"></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="panel hud-panel">
+              <div class="panel-header"><h2>PORTAS ABERTAS</h2><span class="panel-code mono">SENSOR</span></div>
+              <div class="stat-rows mono" id="net-ports"></div>
+            </div>
+            <div class="panel hud-panel grow">
+              <div class="panel-header"><h2>NÓ SELECIONADO</h2><span class="panel-code mono" id="net-node-kind">—</span></div>
+              <div class="last-action mono" id="net-node"><div class="empty-state">Clique num nó da topologia.</div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════
+           MÓDULO 06 · CONFIGURAÇÕES
+      ═══════════════════════════════════════════ -->
+      <section class="section-content page" data-section="config">
+        <div class="mod-head">
+          <div><p class="mod-kicker mono">MÓDULO 06 // PARÂMETROS DO SISTEMA</p><h1 class="mod-title mono">CONFIGURAÇÕES</h1></div>
+        </div>
+        <div class="tri-layout cfg-layout">
+          <div class="page-col">
+            <div class="panel hud-panel">
+              <div class="panel-header"><h2>DETECÇÃO</h2><span class="panel-code mono">detector.py</span></div>
+              <div class="opt-list mono">
+                <div class="opt"><span>Limite força bruta<small>conexões por janela</small></span><em>20 / 10s</em><i class="slider" style="--v:40"></i></div>
+                <div class="opt"><span>Limite port scan<small>portas distintas</small></span><em>8 / 60s</em><i class="slider" style="--v:25"></i></div>
+                <div class="opt"><span>Limite SSH brute force<small>auth_log_monitor.py</small></span><em>5 / 60s</em><i class="slider" style="--v:20"></i></div>
+                <div class="opt"><span>Monitorar auth.log<small>DATASENTINEL_AUTH_LOG_PATH</small></span><i class="toggle" id="cfg-auth"></i></div>
+                <div class="opt"><span>Monitorar IDS (Suricata)<small>DATASENTINEL_EVE_LOG_PATH</small></span><i class="toggle" id="cfg-eve"></i></div>
+              </div>
+            </div>
+            <div class="panel hud-panel">
+              <div class="panel-header"><h2>INTELIGÊNCIA ARTIFICIAL</h2><span class="panel-code mono">IsolationForest</span></div>
+              <div class="opt-list mono">
+                <div class="opt"><span>contamination<small>proporção esperada de anomalias</small></span><em>0.01</em><i class="slider" style="--v:10"></i></div>
+                <div class="opt"><span>amostras mínimas<small>antes de confiar no modelo</small></span><em>30</em><i class="slider" style="--v:30"></i></div>
+                <div class="opt"><span>Re-treino automático<small>a cada 50 amostras reais</small></span><i class="toggle is-on"></i></div>
+                <div class="opt"><span>Modelo treinado<small id="cfg-ai-sub">—</small></span><i class="toggle" id="cfg-ai"></i></div>
+              </div>
+            </div>
+            <div class="panel hud-panel grow">
+              <div class="panel-header"><h2>BANCO DE DADOS</h2><span class="panel-code mono">MongoDB</span></div>
+              <div class="opt-list mono">
+                <div class="opt"><span>URI<small>conexão (sem credenciais)</small></span><code class="field" id="cfg-db-uri">—</code></div>
+                <div class="opt"><span>Status<small>ping a cada 15 s</small></span><em id="cfg-db-status">—</em></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="stage-col">
+            <canvas class="stage-canvas" id="cfg-canvas" aria-label="Módulos ligados ao núcleo"></canvas>
+            <p class="readonly-note mono">SOMENTE LEITURA · altere o .env e reinicie os processos</p>
+          </div>
+
+          <div class="page-col">
+            <div class="panel hud-panel">
+              <div class="panel-header"><h2>ALERTAS</h2><span class="panel-code mono">alerting.py</span></div>
+              <div class="opt-list mono">
+                <div class="opt"><span>E-mail<small>EMAIL_USER / EMAIL_PASS</small></span><i class="toggle" id="cfg-email"></i></div>
+                <div class="opt"><span>Telegram<small>não implementado</small></span><i class="toggle"></i></div>
+                <div class="opt"><span>Webhook<small>não implementado</small></span><i class="toggle"></i></div>
+                <div class="opt"><span>Dedup entre alertas<small>mesmo IP + tipo</small></span><em id="cfg-dedup">60 s</em><i class="slider" style="--v:30"></i></div>
+              </div>
+            </div>
+            <div class="panel hud-panel">
+              <div class="panel-header"><h2>FIREWALL</h2><span class="panel-code mono">firewall.py</span></div>
+              <div class="opt-list mono">
+                <div class="opt"><span>Bloqueio automático<small>alerta real → block_ip()</small></span><i class="toggle is-on"></i></div>
+                <div class="opt"><span>Duração do bloqueio<small>sem TTL</small></span><em>permanente</em></div>
+                <div class="opt"><span>Whitelist<small>nunca bloquear</small></span><code class="field">127.0.0.1, 0.0.0.0, ::1</code></div>
+                <div class="opt"><span>Backend<small>detectado no servidor</small></span><em id="cfg-fw-backend">—</em></div>
+              </div>
+            </div>
+            <div class="panel hud-panel grow">
+              <div class="panel-header"><h2>SEGURANÇA E ACESSO</h2><span class="panel-code mono">AUTH</span></div>
+              <div class="opt-list mono">
+                <div class="opt"><span>Usuário<small>administrador</small></span><code class="field" id="cfg-user">—</code></div>
+                <div class="opt"><span>Autenticação em 2 fatores<small>não implementado</small></span><i class="toggle"></i></div>
+                <div class="opt"><span>Expiração da sessão<small>cookie de sessão</small></span><em>ao fechar o navegador</em></div>
+                <div class="opt"><span>CSRF + rate limit no login<small id="cfg-ratelimit">—</small></span><i class="toggle is-on"></i></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════
+           SOBRE
+      ═══════════════════════════════════════════ -->
+      <section class="section-content page" data-section="sobre">
+        <div class="tri-layout about-layout">
+          <div class="page-col">
+            <div class="panel hud-panel">
+              <div class="panel-header"><h2>PROJETO</h2><span class="panel-code mono">INFO</span></div>
+              <div class="stat-rows mono">
+                <div class="stat-row"><span>LINGUAGEM</span><strong>Python 3</strong></div>
+                <div class="stat-row"><span>AUTOR</span><strong>Weslley Lucas</strong></div>
+                <div class="stat-row"><span>CURSO</span><strong>ADS · UNIFAAT</strong></div>
+                <div class="stat-row"><span>REPOSITÓRIO</span><strong>lucaskenway/DATASENTINEL-PYTHON</strong></div>
+                <div class="stat-row"><span>LICENÇA</span><strong>Apache-2.0</strong></div>
+              </div>
+            </div>
+            <div class="panel hud-panel">
+              <div class="panel-header"><h2>STACK</h2><span class="panel-code mono">TECNOLOGIAS</span></div>
+              <div class="about-tags">
+                <span class="tech-tag is-main mono">Python</span><span class="tech-tag is-main mono">Flask</span><span class="tech-tag is-main mono">Flask-SocketIO</span><span class="tech-tag mono">MongoDB</span>
+                <span class="tech-tag mono">scikit-learn</span><span class="tech-tag mono">IsolationForest</span><span class="tech-tag mono">iptables</span>
+                <span class="tech-tag mono">Suricata</span><span class="tech-tag mono">d3-geo</span><span class="tech-tag mono">psutil</span><span class="tech-tag mono">JavaScript</span>
+                <span class="tech-tag mono">Docker</span>
+              </div>
+            </div>
+            <div class="panel hud-panel">
+              <div class="panel-header"><h2>STATUS DO SISTEMA</h2><span class="panel-code mono">HEALTH</span></div>
+              <div class="stat-rows mono">
+                <div class="stat-row"><span>Uptime (servidor)</span><strong class="dot-ok" id="about-uptime">—</strong></div>
+                <div class="stat-row"><span>Flask</span><strong class="dot-ok" id="about-flask">—</strong></div>
+                <div class="stat-row"><span>Socket.IO</span><strong class="dot-ok" id="about-socket">—</strong></div>
+                <div class="stat-row"><span>MongoDB</span><strong class="dot-ok" id="about-mongo">—</strong></div>
+                <div class="stat-row"><span>Modelo IA</span><strong class="dot-ok" id="about-ai">—</strong></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="about-center">
+            <div class="about-mark" aria-hidden="true">
+              <svg viewBox="0 0 48 48" width="150" height="150" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="9" y="9" width="30" height="30" transform="rotate(45 24 24)" stroke="#4dff9a" stroke-width="1.6" fill="rgba(4,18,14,0.85)"/>
+                <rect x="18.5" y="18.5" width="11" height="11" transform="rotate(45 24 24)" fill="#4dff9a"/>
               </svg>
             </div>
-            <div>
-              <h1 class="about-title">DataSentinel</h1>
-              <p class="about-subtitle">CYBER DEFENSE SYSTEM · v2.0</p>
-            </div>
+            <h1 class="about-title mono">DATASENTINEL</h1>
+            <p class="about-subtitle mono">THREAT INTELLIGENCE CENTER // PYTHON</p>
+            <p class="about-lead mono">Sistema de monitoramento de segurança que coleta logs, detecta ataques com regras e IA, bloqueia ameaças no firewall e mostra tudo em tempo real.</p>
+            <p class="about-kicker mono">ARQUITETURA</p>
+            <svg class="arch-svg" viewBox="0 0 820 380" role="img" aria-label="Fontes alimentam os módulos, que enviam ao Flask; o Flask grava no MongoDB e empurra para a interface">
+              <g class="a-lines">
+                <path d="M211 82V112H351V140"/><path d="M351 82V140"/><path d="M491 82V112H351"/>
+                <path d="M351 196V250"/><path d="M286 168H296"/><path d="M432 168H440"/><path d="M585 168H600"/>
+                <path d="M627 278H662"/><path d="M420 306V340" stroke-dasharray="3 4"/>
+              </g>
+              <g class="a-box"><rect x="141" y="26" width="140" height="56"/><text x="211" y="50" class="a-name" text-anchor="middle">auth.log</text><text x="211" y="68" class="a-sub" text-anchor="middle">fonte</text></g>
+              <g class="a-box"><rect x="291" y="26" width="120" height="56"/><text x="351" y="50" class="a-name" text-anchor="middle">eve.json</text><text x="351" y="68" class="a-sub" text-anchor="middle">IDS</text></g>
+              <g class="a-box"><rect x="421" y="26" width="140" height="56"/><text x="491" y="50" class="a-name" text-anchor="middle">psutil / rede</text><text x="491" y="68" class="a-sub" text-anchor="middle">fonte</text></g>
+              <g class="a-box"><rect x="10" y="140" width="140" height="56"/><text x="80" y="164" class="a-name" text-anchor="middle">monitor.py</text><text x="80" y="182" class="a-sub" text-anchor="middle">coleta</text></g>
+              <g class="a-box"><rect x="160" y="140" width="126" height="56"/><text x="223" y="164" class="a-name" text-anchor="middle">detector.py</text><text x="223" y="182" class="a-sub" text-anchor="middle">regras</text></g>
+              <g class="a-box"><rect x="296" y="140" width="136" height="56"/><text x="364" y="164" class="a-name" text-anchor="middle">ai_detector.py</text><text x="364" y="182" class="a-sub" text-anchor="middle">IsolationForest</text></g>
+              <g class="a-box"><rect x="440" y="140" width="145" height="56"/><text x="512" y="164" class="a-name" text-anchor="middle">firewall.py</text><text x="512" y="182" class="a-sub" text-anchor="middle">iptables / netsh</text></g>
+              <g class="a-box"><rect x="600" y="140" width="145" height="56"/><text x="672" y="164" class="a-name" text-anchor="middle">alerting.py</text><text x="672" y="182" class="a-sub" text-anchor="middle">dedup · e-mail</text></g>
+              <g class="a-box a-main"><rect x="200" y="250" width="427" height="56"/><text x="413" y="276" class="a-name a-big" text-anchor="middle">FLASK + FLASK-SOCKETIO</text><text x="413" y="294" class="a-sub" text-anchor="middle">API REST · autenticação · tempo real</text></g>
+              <g class="a-box a-cyan"><rect x="662" y="250" width="148" height="56"/><text x="736" y="276" class="a-name a-big" text-anchor="middle">MONGODB</text><text x="736" y="294" class="a-sub" text-anchor="middle">alertas</text></g>
+              <g class="a-box a-cyan"><rect x="200" y="340" width="610" height="36"/><text x="505" y="358" class="a-name" text-anchor="middle">INTERFACE WEB // INTELLIGENCE CENTER</text><text x="505" y="372" class="a-sub" text-anchor="middle">d3-geo · globo · painéis em tempo real</text></g>
+            </svg>
           </div>
-          <div class="about-grid">
-            <div class="panel about-panel">
-              <div class="panel-header"><h2>SOBRE O PROJETO</h2></div>
-              <p class="about-text">
-                DataSentinel é um sistema de monitoramento de segurança cibernética em tempo real,
-                desenvolvido com Python (Flask + Socket.IO) e JavaScript. Monitora tentativas de
-                intrusão, analisa padrões de ataques e exibe visualizações geográficas ao vivo.
-              </p>
-              <div class="about-tags">
-                <span class="tech-tag mono">Python</span>
-                <span class="tech-tag mono">Flask</span>
-                <span class="tech-tag mono">Socket.IO</span>
-                <span class="tech-tag mono">Leaflet.js</span>
-                <span class="tech-tag mono">Chart.js</span>
-                <span class="tech-tag mono">psutil</span>
-              </div>
+
+          <div class="page-col">
+            <div class="panel hud-panel">
+              <div class="panel-header"><h2>MÓDULOS</h2><span class="panel-code mono">CORE</span></div>
+              <div class="mod-list mono" id="about-modules"></div>
             </div>
-            <div class="panel about-panel">
-              <div class="panel-header"><h2>INFORMAÇÕES DO SISTEMA</h2></div>
-              <div class="about-info-list">
-                <div class="about-info-row"><span>Versão</span><strong class="mono">2.0.0</strong></div>
-                <div class="about-info-row"><span>Backend</span><strong class="mono">Python / Flask</strong></div>
-                <div class="about-info-row"><span>Real-time</span><strong class="mono">Socket.IO</strong></div>
-                <div class="about-info-row"><span>Mapa</span><strong class="mono">Leaflet + OpenStreetMap</strong></div>
-                <div class="about-info-row"><span>Métricas</span><strong class="mono">psutil</strong></div>
-                <div class="about-info-row"><span>Uptime</span><strong class="mono" id="about-uptime">—</strong></div>
-              </div>
-            </div>
-            <div class="panel about-panel about-capabilities">
-              <div class="panel-header"><h2>CAPACIDADES</h2></div>
-              <ul class="capability-list">
-                <li><span class="cap-dot green"></span>Monitoramento de ataques em tempo real via Socket.IO</li>
-                <li><span class="cap-dot green"></span>Mapa interativo com geolocalização de ataques</li>
-                <li><span class="cap-dot green"></span>Métricas de sistema (CPU, RAM, Disco, Rede)</li>
-                <li><span class="cap-dot green"></span>Classificação automática de tipos de ataque</li>
-                <li><span class="cap-dot green"></span>Top IPs maliciosos por frequência</li>
-                <li><span class="cap-dot green"></span>Distribuição geográfica e por tipo de ataque</li>
-                <li><span class="cap-dot green"></span>Log de eventos em tempo real</li>
-              </ul>
+            <div class="panel hud-panel">
+              <div class="panel-header"><h2>FLUXO DE DADOS</h2><span class="panel-code mono">PIPELINE</span></div>
+              <ol class="flow-list mono">
+                <li><b>01</b> coleta de conexões e logs</li>
+                <li><b>02</b> detecção por regras</li>
+                <li><b>03</b> análise de anomalias (IA)</li>
+                <li><b>04</b> bloqueio no firewall + alerta</li>
+                <li><b>05</b> Flask → MongoDB e painel em tempo real</li>
+              </ol>
             </div>
           </div>
         </div>
       </section>
 
     </main>
+  </div>
+
+  <!-- ─── LINHA DO TEMPO (todas as páginas) ─── -->
+  <div class="intel-timeline mono">
+    <span class="tl-label">LINHA DO TEMPO</span>
+    <span class="tl-range">−30 MIN</span>
+    <div class="tl-track" id="intel-timeline" aria-label="Alertas dos últimos 30 minutos"></div>
+    <span class="tl-range">AGORA</span>
+    <span class="tl-stats">BLOQUEIOS 24H <b id="tl-blocks">0</b> · ALERTAS 30 MIN <b class="danger" id="tl-count">0</b> · SIMULADOS <b class="warn-val" id="tl-sim">0</b></span>
   </div>
 
   <!-- ─── FOOTER ─── -->
@@ -555,6 +667,8 @@
   <div id="logs-updated"></div>
   <span id="ips-tag"></span><span id="session-line"></span>
   <span id="subtitle-main"></span>
+  <span id="metric-threats">0</span><span id="metric-connections">0</span><span id="metric-unique-ips">0</span>
+  <span id="clock-date"></span>
   <span id="readout-net"></span><div id="bar-net" style="width:0%"></div>
 </div>
 
