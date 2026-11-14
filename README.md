@@ -320,7 +320,7 @@ aws secretsmanager get-secret-value \
 > Sem domínio configurado por padrão: o acesso é via HTTP no DNS do próprio
 > ALB. Para destruir tudo depois: `terraform destroy` dentro de `infra/`.
 
-Custo estimado: ~94,56 USD/mês em `us-east-1`. Detalhes por serviço em
+Custo estimado: ~46,95 USD/mês em `us-east-1` no modo `sidecar` (~94,56 com DocumentDB). Detalhes por serviço em
 [`infra/CUSTOS-AWS.md`](infra/CUSTOS-AWS.md).
 
 ### Variaveis de Ambiente
