@@ -14,6 +14,6 @@ output "secrets_manager_secret_arn" {
 }
 
 output "docdb_endpoint" {
-  description = "Endpoint do cluster DocumentDB."
-  value       = aws_docdb_cluster.this.endpoint
+  description = "Endpoint do cluster DocumentDB (vazio no modo sidecar)."
+  value       = local.use_documentdb ? aws_docdb_cluster.this[0].endpoint : ""
 }
