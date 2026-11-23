@@ -31,8 +31,12 @@ def record_connection(ip, port=None):
 
 
 def detect_suspicious(ip):
-    """Assume que record_connection(ip, ...) ja foi chamado neste ciclo."""
-    return len(_connections.get(ip, [])) >= THRESHOLD
+    """Assume que record_connection(ip, ...) ja foi chamado neste ciclo.
+    Dispara por volume de conexoes (brute force) OU por numero de portas
+    distintas tocadas (port scan)."""
+    conns = len(_connections.get(ip, []))
+    ports = len(_ports.get(ip, {}))
+    return conns >= THRESHOLD or ports >= PORT_SCAN_THRESHOLD
 
 
 def classify_attack(conn_count, distinct_ports):

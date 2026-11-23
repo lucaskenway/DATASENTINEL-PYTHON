@@ -1087,6 +1087,396 @@ function drawGlobeHighlight(now) {
   ctx.restore();
 }
 
+/* ────────────────── VISTA AEREA (MAPA PLANO) ──────────────────
+   Segunda vista do mesmo palco: o globo continua igual e intocado; este
+   canvas fica por cima e desenha os MESMOS marcadores e arcos (globe.markers,
+   globe.arcs), com as mesmas cores, numa projecao equiretangular.
+   O botao lateral alterna entre as duas com transicao (CSS em .is-flat). */
+const FLAT_FADE_MS = 700;   /* igual a transicao do CSS */
+const flat = {
+  active: false, canvas: null, ctx: null, btn: null, container: null,
+  width: 0, height: 0, dpr: 1, proj: null,
+  bg: null, bgLand: null, bgW: 0, bgH: 0,
+  fadeUntil: 0, downPointer: null,
+};
+
+function initFlatMap() {
+  const container = document.getElementById('threat-map');
+  if (!container || !globe.canvas || !d3.geoEquirectangular) return;
+  flat.container = container;
+
+  flat.canvas = document.createElement('canvas');
+  flat.canvas.className = 'flat-canvas';
+  flat.canvas.setAttribute('aria-hidden', 'true');
+  flat.ctx = flat.canvas.getContext('2d');
+
+  flat.btn = document.createElement('button');
+  flat.btn.type = 'button';
+  flat.btn.className = 'view-toggle';
+  flat.btn.addEventListener('click', () => setFlatView(!flat.active));
+  /* Antes do tooltip, para o tooltip continuar por cima de tudo */
+  container.insertBefore(flat.canvas, globe.tooltip);
+  container.append(flat.btn);
+  updateViewToggle();
+
+  resizeFlat();
+  new ResizeObserver(resizeFlat).observe(container);
+  bindFlatInteraction();
+  requestAnimationFrame(flatFrame);
+}
+
+function setFlatView(on) {
+  if (!flat.canvas || flat.active === on) return;
+  flat.active = on;
+  flat.fadeUntil = performance.now() + FLAT_FADE_MS;
+  flat.container.classList.toggle('is-flat', on);
+  globe.tooltip.style.opacity = '0';
+  updateViewToggle();
+}
+
+function updateViewToggle() {
+  /* Icone mostra para onde o clique leva: no globo, o mapa; no mapa, o globo */
+  const label = flat.active ? 'Mudar para vista global (globo)' : 'Mudar para vista aérea (mapa plano)';
+  flat.btn.textContent = flat.active ? '🌐' : '🗺\uFE0F';
+  flat.btn.title = label;
+  flat.btn.setAttribute('aria-label', label);
+  flat.btn.setAttribute('aria-pressed', String(flat.active));
+}
+
+function resizeFlat() {
+  const box = flat.container.getBoundingClientRect();
+  if (!box.width || !box.height) return;
+  flat.dpr = window.devicePixelRatio || 1;
+  flat.width = box.width;
+  flat.height = box.height;
+  flat.canvas.width = Math.round(box.width * flat.dpr);
+  flat.canvas.height = Math.round(box.height * flat.dpr);
+  flat.ctx.setTransform(flat.dpr, 0, 0, flat.dpr, 0, 0);
+  /* Mundo inteiro, sem a Antartida (como nos mapas de ameacas) */
+  const pad = 18;
+  flat.proj = d3.geoEquirectangular().fitExtent(
+    [[pad, pad], [box.width - pad, box.height - pad]],
+    { type: 'MultiPoint', coordinates: [[-180, -58], [180, 84]] },
+  );
+  /* Recorta o que fica fora da moldura (ex.: Antartida) */
+  const [x0, y0] = flat.proj([-180, 84]), [x1, y1] = flat.proj([180, -58]);
+  flat.proj.clipExtent([[x0, y0], [x1, y1]]);
+  flat.bg = null;
+}
+
+/* Fundo estatico (grade, continentes, pontos) desenhado uma vez por tamanho */
+function buildFlatBackground() {
+  const w = flat.width, h = flat.height, c = globe.colors;
+  const bg = document.createElement('canvas');
+  bg.width = Math.round(w * flat.dpr);
+  bg.height = Math.round(h * flat.dpr);
+  const ctx = bg.getContext('2d');
+  ctx.setTransform(flat.dpr, 0, 0, flat.dpr, 0, 0);
+  const path = d3.geoPath(flat.proj, ctx);
+
+  ctx.strokeStyle = withAlpha(c.neon, 0.1);
+  ctx.lineWidth = 0.6;
+  ctx.beginPath(); path(d3.geoGraticule10()); ctx.stroke();
+
+  if (globe.land) {
+    ctx.fillStyle = withAlpha(c.neon, 0.06);
+    ctx.beginPath(); path(globe.land); ctx.fill();
+
+    /* Matriz de pontos sobre a terra, como no globo */
+    const mask = document.createElement('canvas');
+    mask.width = Math.ceil(w); mask.height = Math.ceil(h);
+    const mctx = mask.getContext('2d');
+    mctx.beginPath(); d3.geoPath(flat.proj, mctx)(globe.land); mctx.fill();
+    const data = mctx.getImageData(0, 0, mask.width, mask.height).data;
+    const step = Math.max(4, Math.round(w / 220));
+    ctx.fillStyle = withAlpha(c.neon, 0.45);
+    for (let y = step / 2; y < h; y += step) {
+      for (let x = step / 2; x < w; x += step) {
+        if (data[(Math.floor(y) * mask.width + Math.floor(x)) * 4 + 3] > 0) ctx.fillRect(x - 0.7, y - 0.7, 1.4, 1.4);
+      }
+    }
+
+    ctx.save();
+    ctx.shadowColor = withAlpha(c.neon, 0.8);
+    ctx.shadowBlur = 8;
+    ctx.strokeStyle = withAlpha(c.neon2, 0.7);
+    ctx.lineWidth = 0.9;
+    ctx.beginPath(); path(globe.land); ctx.stroke();
+    ctx.restore();
+  }
+
+  /* Moldura do mapa */
+  const [[x0, y0], [x1, y1]] = [flat.proj([-180, 84]), flat.proj([180, -58])];
+  ctx.strokeStyle = withAlpha(c.neon, 0.35);
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
+
+  flat.bg = bg;
+  flat.bgLand = globe.land;
+}
+
+function flatFrame(now) {
+  requestAnimationFrame(flatFrame);
+  /* So desenha quando visivel ou durante a transicao */
+  if (!flat.active && now > flat.fadeUntil) return;
+  if (document.hidden || !flat.canvas.offsetParent) return;
+  if (!flat.width) resizeFlat();
+  if (!flat.width) return;
+  if (!flat.bg || flat.bgLand !== globe.land) buildFlatBackground();
+
+  const { ctx, width: w, height: h } = flat;
+  ctx.clearRect(0, 0, w, h);
+  ctx.drawImage(flat.bg, 0, 0, w, h);
+
+  /* Faixa de varredura horizontal, mesma cadencia do globo */
+  const c = globe.colors;
+  const bandY = ((now / 4000) % 1) * h;
+  const band = ctx.createLinearGradient(0, bandY - 24, 0, bandY + 24);
+  band.addColorStop(0, withAlpha(c.neon, 0));
+  band.addColorStop(0.5, withAlpha(c.neon, 0.07));
+  band.addColorStop(1, withAlpha(c.neon, 0));
+  ctx.fillStyle = band;
+  ctx.fillRect(0, bandY - 24, w, 48);
+
+  drawFlatRoutes(now);
+  drawFlatArcs(now);
+  drawFlatMarkers(now);
+  drawFlatSensor(now);
+}
+
+/* Curva origem -> alvo: arco para cima, mais alto quanto mais longe */
+function flatCurve(from, to) {
+  const p0 = flat.proj(from), p1 = flat.proj(to);
+  const d = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]);
+  const cp = [(p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2 - d * 0.3];
+  return { p0, p1, cp, d };
+}
+
+function flatCurvePoints(k, upTo = 1, steps = 48) {
+  const pts = [];
+  const n = Math.floor(steps * upTo);
+  for (let i = 0; i <= n; i++) {
+    const t = i / steps, u = 1 - t;
+    pts.push([
+      u * u * k.p0[0] + 2 * u * t * k.cp[0] + t * t * k.p1[0],
+      u * u * k.p0[1] + 2 * u * t * k.cp[1] + t * t * k.p1[1],
+    ]);
+  }
+  return pts;
+}
+
+function strokeFlat(pts) {
+  const { ctx } = flat;
+  ctx.beginPath();
+  pts.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])));
+  ctx.stroke();
+}
+
+function drawFlatLabel(x, y, text, color, alpha, below = false) {
+  if (!text) return;
+  const { ctx } = flat;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.font = '600 11px "JetBrains Mono", ui-monospace, monospace';
+  ctx.textBaseline = 'middle';
+  const w = ctx.measureText(text).width;
+  const tx = x + 10 + w > flat.width - 6 ? Math.max(6, x - 10 - w) : x + 10;
+  const ty = below ? y + 12 : y - 10;
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+  ctx.strokeText(text, tx, ty);
+  ctx.fillStyle = color;
+  ctx.fillText(text, tx, ty);
+  ctx.restore();
+}
+
+/* Rotas persistentes dos marcadores ativos (tracejado; selecionada em destaque) */
+function drawFlatRoutes(now) {
+  const { ctx } = flat, c = globe.colors;
+  const byAlert = new Map();
+  for (const m of globe.markers) if (m.alert && eventCoords(m.alert)) byAlert.set(m.alert, m);
+  ctx.save();
+  for (const m of [...byAlert.values()].slice(-GLOBE_MAX_ROUTES)) {
+    const t = attackTarget(m.alert);
+    if (t.lat == null || t.lon == null) continue;
+    const k = flatCurve([m.lon, m.lat], [t.lon, t.lat]);
+    if (k.d < 1) continue;
+    if (globe.selected === m.alert) {
+      ctx.setLineDash([]);
+      ctx.shadowColor = c.neon;
+      ctx.shadowBlur = 10;
+      ctx.strokeStyle = withAlpha(c.neon, 0.95);
+      ctx.lineWidth = 1.8;
+    } else {
+      ctx.setLineDash([5, 5]);
+      ctx.lineDashOffset = -now / 45;
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = withAlpha(m.color, 0.45);
+      ctx.lineWidth = 1;
+    }
+    strokeFlat(flatCurvePoints(k));
+  }
+  ctx.restore();
+}
+
+/* Ataques em andamento: mesmo tempo, cores e efeitos dos arcos do globo */
+function drawFlatArcs(now) {
+  const { ctx } = flat;
+  const targetColor = globe.colors.cyan || '#66d9ff';
+  for (const a of globe.arcs) {
+    const age = now - a.start;
+    const grow = easeInOutCubic(Math.max(0, Math.min(1, age / a.travel)));
+    const alpha = 0.95 * Math.max(0, Math.min(1, (a.life - (now - a.born)) / 1000));
+    const k = flatCurve(a.from, a.to);
+    const [ox, oy] = k.p0, [tx, ty] = k.p1;
+
+    drawFlatLabel(ox, oy, a.fromName, a.color, alpha);
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = targetColor;
+    ctx.lineWidth = 1.4;
+    ctx.translate(tx, ty);
+    ctx.rotate(now / 600);
+    ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath();
+    for (const s of [[0, -12, 0, -5], [0, 5, 0, 12], [-12, 0, -5, 0], [5, 0, 12, 0]]) {
+      ctx.moveTo(s[0], s[1]); ctx.lineTo(s[2], s[3]);
+    }
+    ctx.stroke();
+    ctx.restore();
+
+    if (age >= a.travel) {
+      const hit = age - a.travel;
+      for (let i = 0; i < 3; i++) {
+        const phase = ((hit + i * 300) % 900) / 900;
+        ctx.globalAlpha = alpha * (1 - phase);
+        ctx.strokeStyle = a.color;
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(tx, ty, 6 + phase * 26, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = a.color;
+      ctx.beginPath(); ctx.arc(tx, ty, 4, 0, Math.PI * 2); ctx.fill();
+    }
+    drawFlatLabel(tx, ty, a.toName, targetColor, alpha, true);
+
+    if (age < 0) continue;
+    const pts = flatCurvePoints(k, grow, 64);
+    ctx.strokeStyle = a.color;
+    ctx.globalAlpha = alpha * 0.7;
+    ctx.lineWidth = 1.4;
+    strokeFlat(pts);
+    if (grow < 1) {
+      ctx.globalAlpha = alpha;
+      ctx.lineWidth = 3;
+      strokeFlat(pts.slice(-10));
+      const head = pts[pts.length - 1];
+      ctx.save();
+      ctx.shadowColor = a.color;
+      ctx.shadowBlur = 14;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.arc(head[0], head[1], 3.2, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawFlatMarkers(now) {
+  const { ctx } = flat;
+  for (const m of globe.markers) {
+    const [x, y] = flat.proj([m.lon, m.lat]);
+    const phase = ((now - m.born) % GLOBE_PULSE_MS) / GLOBE_PULSE_MS;
+    ctx.strokeStyle = m.color;
+    ctx.globalAlpha = 0.8 * (1 - phase);
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(x, y, 4 + phase * 14, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = m.color;
+    ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  /* Marcador selecionado: anel fixo, como no globo */
+  const h = globe.highlight;
+  if (h && globe.markers.includes(h.marker)) {
+    const m = h.marker;
+    const [x, y] = flat.proj([m.lon, m.lat]);
+    ctx.save();
+    ctx.strokeStyle = m.color;
+    ctx.shadowColor = m.color;
+    ctx.shadowBlur = 10;
+    ctx.globalAlpha = 0.9;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(x, y, 9 + Math.sin(now / 300) * 1.5, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = m.color;
+    ctx.beginPath(); ctx.arc(x, y, 4.5, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawFlatSensor(now) {
+  const d = state.defender;
+  if (!d || d.lat == null || d.lon == null) return;
+  const { ctx } = flat, c = globe.colors;
+  const [x, y] = flat.proj([d.lon, d.lat]);
+  ctx.save();
+  ctx.strokeStyle = c.neon;
+  for (let k = 0; k < 3; k++) {
+    const phase = ((now / 2600) + k / 3) % 1;
+    ctx.globalAlpha = 0.55 * (1 - phase);
+    ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(x, y, 8 + phase * 36, 0, Math.PI * 2); ctx.stroke();
+  }
+  ctx.globalAlpha = 0.95;
+  ctx.lineWidth = 1.5;
+  ctx.shadowColor = c.neon;
+  ctx.shadowBlur = 10;
+  ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI * 2); ctx.stroke();
+  ctx.fillStyle = c.neon;
+  ctx.beginPath(); ctx.arc(x, y, 2.5, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  drawFlatLabel(x + 6, y + 10, 'SENSOR // DEFENSOR', c.neon, 0.95, true);
+}
+
+function findFlatMarkerAt(e, radius = 9) {
+  const rect = flat.canvas.getBoundingClientRect();
+  const px = e.clientX - rect.left, py = e.clientY - rect.top;
+  let best = null;
+  for (const m of globe.markers) {
+    if (!m.ip) continue;
+    const [x, y] = flat.proj([m.lon, m.lat]);
+    const d = Math.hypot(x - px, y - py);
+    if (d < radius && (!best || d < best.d)) best = { m, x, y, d };
+  }
+  return best;
+}
+
+/* Mesmo comportamento do globo: tooltip ao passar e clique abre a origem */
+function bindFlatInteraction() {
+  const c = flat.canvas;
+  c.addEventListener('pointerdown', e => { flat.downPointer = [e.clientX, e.clientY]; });
+  c.addEventListener('pointermove', e => {
+    const hit = findFlatMarkerAt(e);
+    c.style.cursor = hit && hit.m.alert ? 'pointer' : '';
+    if (!hit) { globe.tooltip.style.opacity = '0'; return; }
+    const place = hit.m.alert ? placeName(hit.m.alert) : hit.m.location;
+    globe.tooltip.textContent = `${hit.m.ip}${place ? ` · ${place}` : ''}`;
+    globe.tooltip.style.left = `${hit.x}px`;
+    globe.tooltip.style.top = `${hit.y}px`;
+    globe.tooltip.style.opacity = '1';
+  });
+  c.addEventListener('pointerup', e => {
+    const [dx, dy] = flat.downPointer || [e.clientX, e.clientY];
+    if (Math.hypot(e.clientX - dx, e.clientY - dy) < 5) {
+      const hit = findFlatMarkerAt(e, 14);
+      if (hit && hit.m.alert) showAttackerCard(hit.m.alert);
+    }
+  });
+  c.addEventListener('pointerleave', () => { globe.tooltip.style.opacity = '0'; });
+}
+
 /* Selecionar um evento da tabela: abre o cartao e, havendo coordenadas,
    repete o ataque no globo. Sem coordenadas, mostra so o cartao. */
 function selectAlert(payload) {
@@ -1857,7 +2247,7 @@ function updateStageHud() {
   const lon = ((-globe.rotation[0] + 540) % 360) - 180;
   const f = v => `${v < 0 ? '-' : '+'}${Math.abs(v).toFixed(2).padStart(6, '0')}`;
   setText('hud-center', `LAT ${f(lat)} // LON ${f(lon)}`);
-  setText('hud-zoom', `ZOOM ${globe.zoom.toFixed(2)}x · ORTHO`);
+  setText('hud-zoom', flat.active ? 'ZOOM 1.00x · PLANO' : `ZOOM ${globe.zoom.toFixed(2)}x · ORTHO`);
   const targets = new Set(globe.markers.filter(m => m.ip).map(m => m.ip)).size;
   setText('hud-scan', `VARREDURA 360° · ${targets} ${targets === 1 ? 'ALVO' : 'ALVOS'}`);
   setText('hud-routes', `ROTAS ATIVAS ${String(globe.routeCount || 0).padStart(2, '0')}`);
@@ -3147,6 +3537,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setInterval(updateUptime, 1000);
 
   initGlobe();
+  initFlatMap();
   ensureChart();
   renderIntelPanels();
   setInterval(renderIntelPanels, 5000);

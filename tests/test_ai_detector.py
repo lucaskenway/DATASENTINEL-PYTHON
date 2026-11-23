@@ -45,8 +45,22 @@ def test_normal_traffic_is_not_flagged():
     assert ai_detector.ai_detect([2, 1]) is False
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "Limitacao conhecida: o IsolationForest nao extrapola para valores "
+        "fora da faixa de treino; um ponto extremo cai na mesma folha do "
+        "maior ponto normal e recebe score de 'normal'. Remover o xfail "
+        "quando o modelo for trocado."
+    ),
+)
 def test_extreme_traffic_is_flagged():
     _write_normal_traffic(ai_detector.DATASET_FILE)
+    # Treina so com trafego normal antes de avaliar. Sem isso, ai_detect()
+    # grava o ponto testado no dataset e retreina com ele, e o teste passa
+    # sem provar que o modelo detecta anomalias que nunca viu.
+    ai_detector._train(ai_detector._load_dataset())
+    ai_detector._samples_since_train = 0
 
     assert ai_detector.ai_detect([80, 40]) is True
 

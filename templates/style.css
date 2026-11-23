@@ -298,6 +298,33 @@ body {
   cursor: grab; touch-action: none;
 }
 .globe-canvas:active { cursor: grabbing; }
+
+/* Vista aerea (mapa plano) x vista global (globo): troca com zoom + fade */
+.globe-canvas, .flat-canvas {
+  transition: opacity 0.7s ease, transform 0.7s cubic-bezier(0.65, 0, 0.35, 1);
+}
+.flat-canvas {
+  position: absolute; inset: 0;
+  display: block; width: 100%; height: 100%;
+  opacity: 0; transform: scale(0.82); pointer-events: none;
+}
+.globe-container.is-flat .flat-canvas { opacity: 1; transform: none; pointer-events: auto; }
+.globe-container.is-flat .globe-canvas { opacity: 0; transform: scale(1.35); pointer-events: none; }
+.view-toggle {
+  position: absolute; z-index: 750; right: 14px; top: 50%; transform: translateY(-50%);
+  width: 42px; height: 42px; border-radius: 50%;
+  display: grid; place-items: center;
+  font-size: 20px; line-height: 1; cursor: pointer;
+  background: rgba(3,14,8,0.8); border: 1px solid rgba(77,255,154,0.45);
+  box-shadow: 0 0 12px rgba(77,255,154,0.25);
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+}
+.view-toggle:hover { border-color: var(--neon); box-shadow: 0 0 18px rgba(77,255,154,0.5); }
+.view-toggle:active { transform: translateY(-50%) scale(0.92); }
+.view-toggle:focus-visible { outline: 2px solid var(--neon); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) {
+  .globe-canvas, .flat-canvas { transition: opacity 0.2s; transform: none !important; }
+}
 .globe-tooltip {
   position: absolute; z-index: 800; pointer-events: none; opacity: 0;
   transform: translate(-50%, calc(-100% - 10px));

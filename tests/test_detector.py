@@ -56,6 +56,22 @@ def test_detect_suspicious_only_at_threshold():
     assert detector.detect_suspicious(ip)
 
 
+def test_detect_suspicious_on_port_scan():
+    """Port scan classico: 1 conexao por porta, bem abaixo do THRESHOLD de
+    conexoes, mas tocando PORT_SCAN_THRESHOLD portas distintas."""
+    ip = "203.0.113.5"
+    for port in range(1, detector.PORT_SCAN_THRESHOLD):
+        detector.record_connection(ip, port)
+    assert not detector.detect_suspicious(ip)
+
+    conn_count, distinct_ports = detector.record_connection(
+        ip, detector.PORT_SCAN_THRESHOLD
+    )
+    assert conn_count < detector.THRESHOLD
+    assert detector.detect_suspicious(ip)
+    assert detector.classify_attack(conn_count, distinct_ports) == "port_scan"
+
+
 def test_detect_suspicious_unknown_ip():
     assert not detector.detect_suspicious("203.0.113.99")
 
